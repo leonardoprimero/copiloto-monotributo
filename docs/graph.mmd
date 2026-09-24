@@ -5,17 +5,20 @@ config:
 ---
 graph TD;
 	__start__([<p>__start__</p>]):::first
-	extract_invoices(extract_invoices)
+	extract_one(extract_one)
+	collect_invoices(collect_invoices)
 	validate_invoices(validate_invoices)
 	lookup_taxpayer(lookup_taxpayer)
 	analyze_income(analyze_income)
 	request_accountant_review(request_accountant_review)
 	write_report(write_report)
 	__end__([<p>__end__</p>]):::last
-	__start__ --> extract_invoices;
+	__start__ -.-> collect_invoices;
+	__start__ -.-> extract_one;
 	analyze_income -. &nbsp;review&nbsp; .-> request_accountant_review;
 	analyze_income -. &nbsp;ok&nbsp; .-> write_report;
-	extract_invoices --> validate_invoices;
+	collect_invoices --> validate_invoices;
+	extract_one --> collect_invoices;
 	lookup_taxpayer --> analyze_income;
 	request_accountant_review --> write_report;
 	validate_invoices --> lookup_taxpayer;

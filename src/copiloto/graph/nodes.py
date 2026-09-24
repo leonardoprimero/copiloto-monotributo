@@ -11,12 +11,12 @@ keeps these small enough to read in one go.
 
 from datetime import date
 
-from langgraph.types import interrupt
+from langgraph.types import Send, interrupt
 
 from copiloto.analysis import RiskPolicy, analyze
-from copiloto.extractors.protocol import ExtractionError, InvoiceExtractor
-from copiloto.graph.state import CopilotState
-from copiloto.models import ExtractedInvoice, HumanDecision, Issue
+from copiloto.extractors.protocol import InvoiceExtractor
+from copiloto.graph.state import CopilotState, ExtractionTask
+from copiloto.models import HumanDecision, Issue
 from copiloto.registry import TaxpayerRegistry
 from copiloto.report import render_report
 from copiloto.scales import Scales
@@ -27,48 +27,79 @@ from copiloto.validation import (
 )
 
 
-def make_extract_node(extractor: InvoiceExtractor):
-    """Build the only node that reads with a model.
+def fan_out_invoices(state: CopilotState) -> list[Send] | str:
+    """Send every invoice to its own extraction task.
+
+    Reading an invoice is the only step that calls a model, and it is the slow
+    one. The invoices are independent, so they go out as one `Send` each and
+    LangGraph runs them together in a single superstep.
+
+    With no invoices there is nothing to fan out, and the empty case is routed
+    straight to the collector, which reports the missing data.
+    """
+    raw_invoices = state.get("raw_invoices", ())
+    if not raw_invoices:
+        return "collect_invoices"
+    return [Send("extract_one", {"raw": raw}) for raw in raw_invoices]
+
+
+def make_extract_one_node(extractor: InvoiceExtractor):
+    """Build the task that reads a single invoice with a model.
 
     It reads and records; it never judges. An invoice that cannot be read
-    becomes an issue and the remaining invoices are still processed, because
-    one unreadable document should not hide the other eleven.
+    becomes an issue and the others still go through, because one unreadable
+    document should not hide the other eleven. The catch is deliberately
+    broad: a provider that hangs up raises its own transport error, not
+    `ExtractionError`, and one bad invoice must not take the run down.
+
+    Note the payload: a `Send` hands the node its own dict, not the graph
+    state. What it returns is merged into the state through the reducers.
     """
 
-    def extract_invoices(state: CopilotState) -> dict:
-        raw_invoices = state.get("raw_invoices", ())
-        if not raw_invoices:
-            # Zero invoices would accumulate zero and resolve to category A,
-            # which reads exactly like "all good". It is missing data instead.
+    def extract_one(state: ExtractionTask) -> dict:
+        raw = state["raw"]
+        try:
+            return {"extracted": [extractor.extract(raw)]}
+        except Exception as error:  # noqa: BLE001
             return {
-                "invoices": (),
                 "issues": [
-                    Issue(
-                        code="NO_INVOICES",
-                        severity="warning",
-                        message="No invoices were provided, so nothing could be assessed.",
-                    )
-                ],
-            }
-
-        invoices: list[ExtractedInvoice] = []
-        issues: list[Issue] = []
-        for raw in raw_invoices:
-            try:
-                invoices.append(extractor.extract(raw))
-            except ExtractionError as error:
-                issues.append(
                     Issue(
                         code="EXTRACTION_FAILED",
                         severity="warning",
                         message=f"An invoice could not be read: {error}",
                     )
+                ]
+            }
+
+    return extract_one
+
+
+def collect_invoices(state: CopilotState) -> dict:
+    """Put the parallel results back in a fixed order.
+
+    Sorted by issue date, then by number. Tasks may finish in any order, and
+    the same folder must always produce the same report; sorting on the
+    invoices themselves makes that true regardless of how the framework
+    happens to schedule them.
+    """
+    extracted = state.get("extracted", [])
+    if not extracted and not state.get("raw_invoices", ()):
+        # Zero invoices would accumulate zero and resolve to category A, which
+        # reads exactly like "all good". It is missing data instead.
+        return {
+            "invoices": (),
+            "issues": [
+                Issue(
+                    code="NO_INVOICES",
+                    severity="warning",
+                    message="No invoices were provided, so nothing could be assessed.",
                 )
+            ],
+        }
 
-        return {"invoices": tuple(invoices), "issues": issues}
-
-
-    return extract_invoices
+    return {
+        "invoices": tuple(sorted(extracted, key=lambda i: (i.issue_date, i.number)))
+    }
 
 
 def make_validate_node(*, scales: Scales, today: date):

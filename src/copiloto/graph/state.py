@@ -1,9 +1,9 @@
 """The shared state that travels through the graph.
 
-Only `issues` carries a reducer. Three different nodes contribute issues and
-none of them may overwrite another's, so the channel appends. Every other key
-is written exactly once, by exactly one node, so a plain value is correct and
-cheaper to reason about.
+Two keys carry a reducer, and both for the same reason: they have more than
+one writer. `issues` collects from several nodes, and `extracted` collects
+from the parallel extraction tasks. Every other key is written exactly once,
+by exactly one node, so a plain value is correct and cheaper to reason about.
 """
 
 import operator
@@ -19,6 +19,16 @@ from copiloto.models import (
 )
 
 
+class ExtractionTask(TypedDict):
+    """What one parallel extraction task receives.
+
+    A `Send` hands its node this payload instead of the graph state, so the
+    task sees exactly one invoice and nothing else.
+    """
+
+    raw: str
+
+
 class CopilotState(TypedDict, total=False):
     # Inputs
     taxpayer_cuit: str
@@ -26,7 +36,12 @@ class CopilotState(TypedDict, total=False):
     # Optional input: surface, energy and rent as declared by the taxpayer.
     declared: DeclaredParameters | None
 
-    # Written by extract_invoices
+    # Appended by extract_one, which runs once per invoice and in parallel.
+    # A channel rather than a value because there are many writers, and the
+    # order they finish in is not the order they were sent in.
+    extracted: Annotated[list[ExtractedInvoice], operator.add]
+
+    # Written by collect_invoices: `extracted`, sorted chronologically.
     invoices: tuple[ExtractedInvoice, ...]
 
     # Appended by extract_invoices, validate_invoices and lookup_taxpayer

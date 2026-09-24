@@ -1,7 +1,7 @@
 """The published diagram must be the graph, not a drawing of it.
 
-Checking that the six node names appear is not enough: redirecting an edge
-keeps every name and still makes the picture a lie. So the committed file is
+Checking that the node names appear is not enough: redirecting an edge keeps
+every name and still makes the picture a lie. So the committed file is
 compared byte for byte against what the compiled graph renders.
 """
 
@@ -16,7 +16,8 @@ from copiloto.registry import default_registry
 from copiloto.scales import load_scales
 
 NODES = (
-    "extract_invoices",
+    "extract_one",
+    "collect_invoices",
     "validate_invoices",
     "lookup_taxpayer",
     "analyze_income",

@@ -1,17 +1,22 @@
-"""The first two nodes: the AI reads, the code judges.
+"""The first steps: the AI reads, the code judges.
 
-`extract_invoices` is the only node that touches a model. Everything it
-produces is then checked by `validate_invoices`, which decides nothing about
-risk yet — it only records what does not add up.
+Reading is the only place a model participates, and it happens once per
+invoice in parallel. `extract` below runs those tasks and the collector the
+way the graph does, so these tests keep describing the step as a whole.
+Everything it produces is then checked by `validate_invoices`, which decides
+nothing about risk yet — it only records what does not add up.
 """
 
 from datetime import date
 from decimal import Decimal
 
-import pytest
 
 from copiloto.extractors.fake import FakeExtractor
-from copiloto.graph.nodes import make_extract_node, make_validate_node
+from copiloto.graph.nodes import (
+    collect_invoices,
+    make_extract_one_node,
+    make_validate_node,
+)
 from copiloto.models import ExtractedInvoice, InvoiceItem
 from copiloto.scales import load_scales
 
@@ -38,8 +43,23 @@ def invoice(cuit: str = CUIT, issue_date: date = date(2026, 9, 15)) -> Extracted
 
 
 def extract(raw_invoices: tuple[str, ...], mapping=None) -> dict:
-    node = make_extract_node(FakeExtractor(mapping if mapping is not None else {}))
-    return node({"taxpayer_cuit": CUIT, "raw_invoices": raw_invoices})
+    """Fan out, then collect, merging writes the way the reducers do."""
+    one = make_extract_one_node(FakeExtractor(mapping if mapping is not None else {}))
+
+    extracted: list[ExtractedInvoice] = []
+    issues = []
+    for raw in raw_invoices:
+        written = one({"raw": raw})
+        extracted += written.get("extracted", [])
+        issues += written.get("issues", [])
+
+    collected = collect_invoices(
+        {"taxpayer_cuit": CUIT, "raw_invoices": raw_invoices, "extracted": extracted}
+    )
+    return {
+        "invoices": collected["invoices"],
+        "issues": issues + collected.get("issues", []),
+    }
 
 
 def validate(invoices: tuple[ExtractedInvoice, ...]) -> list[str]:
@@ -115,12 +135,27 @@ class TestValidateNode:
 
 
 class TestStateContract:
-    @pytest.mark.parametrize("key", ["invoices", "issues"])
-    def test_extract_writes_only_the_keys_it_owns(self, key: str) -> None:
-        result = extract(("text-a",), {"text-a": invoice()})
+    def test_a_successful_task_writes_only_its_invoice(self) -> None:
+        """One task, one write: the reducer does the merging."""
+        one = make_extract_one_node(FakeExtractor({"text-a": invoice()}))
 
-        assert key in result
-        assert set(result) == {"invoices", "issues"}
+        assert set(one({"raw": "text-a"})) == {"extracted"}
+
+    def test_a_failed_task_writes_only_its_issue(self) -> None:
+        one = make_extract_one_node(FakeExtractor({}))
+
+        assert set(one({"raw": "bad"})) == {"issues"}
+
+    def test_the_collector_writes_only_invoices(self) -> None:
+        assert set(collect_invoices({"raw_invoices": ("a",), "extracted": [invoice()]})) == {
+            "invoices"
+        }
+
+    def test_the_collector_reports_the_empty_case(self) -> None:
+        assert set(collect_invoices({"raw_invoices": (), "extracted": []})) == {
+            "invoices",
+            "issues",
+        }
 
     def test_validate_writes_only_issues(self) -> None:
         node = make_validate_node(scales=SCALES, today=TODAY)

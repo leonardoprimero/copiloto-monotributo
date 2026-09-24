@@ -126,7 +126,7 @@ class TestIssueAccumulation:
 
 
 class TestStructure:
-    def test_the_graph_exposes_its_six_nodes(self) -> None:
+    def test_the_graph_exposes_its_nodes(self) -> None:
         graph = build_graph(
             extractor=FakeExtractor({}),
             registry=default_registry(),
@@ -138,7 +138,8 @@ class TestStructure:
         nodes = set(graph.get_graph().nodes)
 
         assert {
-            "extract_invoices",
+            "extract_one",
+            "collect_invoices",
             "validate_invoices",
             "lookup_taxpayer",
             "analyze_income",

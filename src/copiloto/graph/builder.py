@@ -1,7 +1,8 @@
 """Assembling the graph.
 
-A directed pipeline with one fork: extract, validate, look up, analyse, and
-then either write the report or hand the case to an accountant first.
+A pipeline with one fan-out and one fork: read every invoice in parallel,
+collect them, validate, look up, analyse, and then either write the report or
+hand the case to an accountant first.
 
 Dependencies arrive as arguments and are captured by the node factories, so the
 same builder produces the offline demo graph, the eval graph and a graph backed
@@ -15,15 +16,17 @@ from langgraph.graph import END, START, StateGraph
 
 from copiloto.analysis import RiskPolicy
 from copiloto.extractors.protocol import InvoiceExtractor
+from copiloto.graph.checkpoints import open_checkpointer
 from copiloto.graph.nodes import (
+    collect_invoices,
+    fan_out_invoices,
     make_analyze_node,
-    make_extract_node,
+    make_extract_one_node,
     make_lookup_node,
     make_report_node,
     make_review_node,
     make_validate_node,
 )
-from copiloto.graph.checkpoints import open_checkpointer
 from copiloto.graph.routing import make_router
 from copiloto.graph.state import CopilotState
 from copiloto.registry import TaxpayerRegistry
@@ -48,7 +51,8 @@ def build_graph(
     """
     workflow = StateGraph(CopilotState)
 
-    workflow.add_node("extract_invoices", make_extract_node(extractor))
+    workflow.add_node("extract_one", make_extract_one_node(extractor))
+    workflow.add_node("collect_invoices", collect_invoices)
     workflow.add_node("validate_invoices", make_validate_node(scales=scales, today=today))
     workflow.add_node("lookup_taxpayer", make_lookup_node(registry))
     workflow.add_node(
@@ -57,8 +61,13 @@ def build_graph(
     workflow.add_node("request_accountant_review", make_review_node())
     workflow.add_node("write_report", make_report_node(scales=scales))
 
-    workflow.add_edge(START, "extract_invoices")
-    workflow.add_edge("extract_invoices", "validate_invoices")
+    # The fan-out. One extraction task per invoice, all in one superstep, then
+    # a collector that puts the results back in a fixed order.
+    workflow.add_conditional_edges(
+        START, fan_out_invoices, ["extract_one", "collect_invoices"]
+    )
+    workflow.add_edge("extract_one", "collect_invoices")
+    workflow.add_edge("collect_invoices", "validate_invoices")
     workflow.add_edge("validate_invoices", "lookup_taxpayer")
     workflow.add_edge("lookup_taxpayer", "analyze_income")
 

@@ -117,6 +117,14 @@ def _money(amount: str) -> str:
     return f"$ {value:,.2f}".replace(",", "@").replace(".", ",").replace("@", ".")
 
 
+def _headroom_line(scope: str, amount: str) -> str:
+    """Margin left, or by how much the cap was passed; never a negative amount."""
+    value = Decimal(amount)
+    if value >= 0:
+        return f"Margen en {scope}: {_money(amount)}"
+    return f"Tope de {scope} superado por: {_money(str(-value))}"
+
+
 def _print_alert(payload: dict) -> None:
     print("\n" + "=" * 68)
     print("Derivamos este caso a un contador antes de cerrar el informe.")
@@ -133,6 +141,10 @@ def _print_alert(payload: dict) -> None:
         # a formatted report looks like two different systems talking.
         print(f"Acumulado 12 meses: {_money(payload['accumulated_12m'])}")
         print(f"Proyección anual  : {_money(payload['projected_12m'])}")
+    if payload.get("headroom_registered") is not None:
+        print(_headroom_line("categoría", payload["headroom_registered"]))
+    if payload.get("headroom_top") is not None:
+        print(_headroom_line("régimen", payload["headroom_top"]))
 
     for reason in payload["reasons"]:
         print(f"  - {_REASONS.get(reason, reason)}")

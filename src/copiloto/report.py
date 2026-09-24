@@ -75,6 +75,59 @@ def _money(amount: Decimal) -> str:
     return f"$ {amount:,.2f}".replace(",", "@").replace(".", ",").replace("@", ".")
 
 
+def _months(months: Decimal) -> str:
+    return f"{months:.1f}".replace(".", ",") + " meses"
+
+
+def _headroom_section(analysis: Analysis, scales: Scales) -> list[str]:
+    """How much can still be invoiced, and how soon that runs out.
+
+    A passed cap is explained ("superaste ... por") rather than printed as a
+    negative amount, and months are only estimated when there is a recent pace
+    to extrapolate from.
+    """
+    lines: list[str] = []
+
+    registered = analysis.headroom_registered
+    if registered is not None:
+        label = f"tu categoría registrada ({analysis.registered_category})"
+        if registered >= 0:
+            lines.append(f"- Hasta el tope de {label}: {_money(registered)}")
+        else:
+            lines.append(f"- Superaste el tope de {label} por {_money(-registered)}.")
+
+    top_label = f"el tope del régimen ({scales.top_category.name})"
+    if analysis.headroom_top >= 0:
+        lines.append(f"- Hasta {top_label}: {_money(analysis.headroom_top)}")
+    else:
+        lines.append(f"- Superaste {top_label} por {_money(-analysis.headroom_top)}.")
+
+    if analysis.projected_12m <= 0:
+        lines.append(
+            "- Sin facturación reciente no podemos estimar cuándo llegarías a un tope."
+        )
+        return lines
+
+    months_registered = analysis.months_to_registered_cap
+    if months_registered is not None and months_registered > 0:
+        lines.append(
+            f"- Al ritmo reciente, llegás al tope de tu categoría en {_months(months_registered)}."
+        )
+    months_top = analysis.months_to_top_cap
+    if months_top is not None and months_top > 0:
+        lines.append(
+            f"- Al ritmo reciente, llegás al tope del régimen en {_months(months_top)}."
+        )
+    if (months_registered is not None and months_registered > 0) or (
+        months_top is not None and months_top > 0
+    ):
+        lines.append(
+            "- Los meses son una estimación propia: suponen que seguís al ritmo de los "
+            "últimos 90 días y no descuentan las facturas que van saliendo de la ventana."
+        )
+    return lines
+
+
 def _review_section(decision: HumanDecision | None) -> list[str]:
     if decision is None:
         return ["Sin revisión: este caso no fue derivado a una persona."]
@@ -135,6 +188,8 @@ def render_report(
         "- Es una estimación propia de esta herramienta, no una fórmula de ARCA.",
         "",
     ]
+
+    lines += ["## Margen", "", *_headroom_section(analysis, scales), ""]
 
     lines += ["## Riesgo", "", f"- Nivel: {_RISK_LABELS[analysis.risk_level]}", ""]
     if analysis.reasons:

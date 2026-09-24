@@ -148,6 +148,12 @@ def build_review_alert(state: CopilotState) -> dict:
         "projected_12m": str(analysis.projected_12m) if analysis else None,
         "computed_category": analysis.computed_category if analysis else None,
         "registered_category": analysis.registered_category if analysis else None,
+        "headroom_registered": (
+            str(analysis.headroom_registered)
+            if analysis and analysis.headroom_registered is not None
+            else None
+        ),
+        "headroom_top": str(analysis.headroom_top) if analysis else None,
         "issues": [
             {"code": i.code, "severity": i.severity, "message": i.message}
             for i in issues

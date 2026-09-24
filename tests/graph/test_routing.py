@@ -26,6 +26,10 @@ def analysis(level: str) -> Analysis:
         registered_category="A",
         risk_level=level,  # pyright: ignore[reportArgumentType]
         reasons=(),
+        headroom_registered=Decimal("2409410.45"),
+        headroom_top=Decimal("117010838.75"),
+        months_to_registered_cap=Decimal("3.0"),
+        months_to_top_cap=Decimal("144.3"),
     )
 
 

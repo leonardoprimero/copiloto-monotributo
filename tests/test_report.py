@@ -29,6 +29,10 @@ CALM = Analysis(
     registered_category="A",
     risk_level="low",
     reasons=(),
+    headroom_registered=Decimal("2409410.45"),
+    headroom_top=Decimal("117010838.75"),
+    months_to_registered_cap=Decimal("3.0"),
+    months_to_top_cap=Decimal("144.3"),
 )
 
 RISKY = Analysis(
@@ -38,7 +42,18 @@ RISKY = Analysis(
     registered_category="A",
     risk_level="medium",
     reasons=("CATEGORY_MISMATCH",),
+    headroom_registered=Decimal("-2390589.55"),
+    headroom_top=Decimal("112210838.75"),
+    months_to_registered_cap=Decimal("0"),
+    months_to_top_cap=Decimal("92.2"),
 )
+
+
+def section(body: str, heading: str) -> str:
+    """The text between `heading` and the next heading."""
+    _, _, rest = body.partition(heading)
+    text, _, _ = rest.partition("\n## ")
+    return text
 
 
 def report(analysis=CALM, issues=(), decision=None, invoice_count=12) -> str:
@@ -101,6 +116,74 @@ class TestFigures:
         assert "Categoría registrada" in body
         assert "Categoría estimada" in body
         assert "solo por ingresos" in body
+
+
+class TestHeadroom:
+    """The one section that answers "and now what?"."""
+
+    def test_says_how_much_can_still_be_invoiced_in_the_registered_category(self) -> None:
+        body = report()
+
+        assert "## Margen" in body
+        assert "2.409.410,45" in body
+
+    def test_says_how_much_is_left_before_leaving_the_regime(self) -> None:
+        body = report()
+
+        assert "117.010.838,75" in body
+
+    def test_estimates_the_months_left_at_the_recent_pace(self) -> None:
+        body = report()
+
+        assert "3,0 meses" in body
+
+    def test_says_by_how_much_a_passed_cap_was_passed(self) -> None:
+        """A negative margin is not printed as a negative number: it is explained."""
+        body = report(analysis=RISKY)
+
+        assert "superaste" in body.lower()
+        assert "2.390.589,55" in body
+        assert "-2.390.589,55" not in body
+
+    def test_does_not_estimate_months_without_a_pace(self) -> None:
+        still = Analysis(
+            accumulated_12m=Decimal("9600000"),
+            projected_12m=Decimal("0"),
+            computed_category="A",
+            registered_category="A",
+            risk_level="low",
+            reasons=(),
+            headroom_registered=Decimal("2409410.45"),
+            headroom_top=Decimal("117010838.75"),
+            months_to_registered_cap=None,
+            months_to_top_cap=None,
+        )
+
+        margin = section(report(analysis=still), "## Margen")
+
+        assert "meses" not in margin
+        assert "sin facturación reciente" in margin.lower()
+
+    def test_skips_the_registered_margin_when_there_is_no_registered_category(self) -> None:
+        unknown = Analysis(
+            accumulated_12m=Decimal("9600000"),
+            projected_12m=Decimal("9733333.33"),
+            computed_category="A",
+            registered_category=None,
+            risk_level="low",
+            reasons=(),
+            headroom_registered=None,
+            headroom_top=Decimal("117010838.75"),
+            months_to_registered_cap=None,
+            months_to_top_cap=Decimal("144.3"),
+        )
+
+        body = render_report(
+            unknown, issues=(), taxpayer=None, scales=SCALES, invoice_count=12
+        )
+
+        assert "categoría registrada" not in section(body, "## Margen").lower()
+        assert "117.010.838,75" in body
 
 
 class TestLimits:

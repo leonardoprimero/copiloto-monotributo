@@ -113,6 +113,13 @@ class TestAlertPayload:
         assert payload["computed_category"] == "B"
         assert payload["registered_category"] == "A"
 
+    def test_the_alert_tells_the_accountant_the_margin_left(self, graph) -> None:
+        """12 x 1,200,000 against the A cap: 12,009,410.45 - 14,400,000."""
+        payload = start(graph, "payload-3")["__interrupt__"][0].value
+
+        assert payload["headroom_registered"] == "-2390589.55"
+        assert payload["headroom_top"] == "112210838.75"
+
     def test_the_alert_only_lists_issues_worth_a_human_look(self) -> None:
         """Informational issues are noise in an alert; they stay in the report."""
         state: CopilotState = {
@@ -123,6 +130,10 @@ class TestAlertPayload:
                 registered_category="A",
                 risk_level="low",
                 reasons=(),
+                headroom_registered=Decimal("12009409.45"),
+                headroom_top=Decimal("126610837.75"),
+                months_to_registered_cap=Decimal("144112913.4"),
+                months_to_top_cap=Decimal("1519330053.0"),
             ),
             "issues": [
                 Issue(code="OUTSIDE_WINDOW", severity="info", message="m"),
@@ -150,6 +161,10 @@ class TestReplaySafety:
                 registered_category="A",
                 risk_level="medium",
                 reasons=("CATEGORY_MISMATCH",),
+                headroom_registered=Decimal("-2390589.55"),
+                headroom_top=Decimal("112210838.75"),
+                months_to_registered_cap=Decimal("0"),
+                months_to_top_cap=Decimal("92.2"),
             ),
             "issues": [],
         }

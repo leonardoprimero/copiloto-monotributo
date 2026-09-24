@@ -18,6 +18,8 @@ RiskLevel = Literal["low", "medium", "high", "exclusion"]
 
 _ORDER: tuple[RiskLevel, ...] = ("low", "medium", "high", "exclusion")
 _CENTS = Decimal("0.01")
+_TENTHS = Decimal("0.1")
+_MONTHS_PER_YEAR = Decimal(12)
 
 
 @dataclass(frozen=True, slots=True)
@@ -46,6 +48,15 @@ class Analysis:
     registered_category: str | None
     risk_level: RiskLevel
     reasons: tuple[str, ...]
+    # Headroom: what can still be invoiced before each cap. Negative once the
+    # cap is passed, by exactly the amount it was passed by. The registered
+    # figures are None when there is no registered category to measure against.
+    headroom_registered: Decimal | None
+    headroom_top: Decimal
+    # Months of the recent pace until each cap, to one decimal. None when there
+    # is no pace to extrapolate from or no registered cap; zero once reached.
+    months_to_registered_cap: Decimal | None
+    months_to_top_cap: Decimal | None
 
     def __post_init__(self) -> None:
         # Checkpoint deserialization hands back a list, so an Analysis restored
@@ -106,6 +117,20 @@ def projected_income(
     return projected.quantize(_CENTS, rounding=ROUND_HALF_UP)
 
 
+def months_until(headroom: Decimal | None, *, projected_12m: Decimal) -> Decimal | None:
+    """How many months of the projected pace it takes to consume `headroom`.
+
+    Zero once the cap is reached, None when there is nothing to measure: no
+    cap, or no recent invoicing. "Never" would be a guess, so it is not said.
+    """
+    if headroom is None or projected_12m <= 0:
+        return None
+    if headroom <= 0:
+        return Decimal("0")
+    months = headroom * _MONTHS_PER_YEAR / projected_12m
+    return months.quantize(_TENTHS, rounding=ROUND_HALF_UP)
+
+
 def _registered_cap(taxpayer: TaxpayerProfile | None, scales: Scales) -> Decimal | None:
     if taxpayer is None:
         return None
@@ -164,6 +189,9 @@ def analyze(
     if any(issue.code == "UNIT_PRICE_ABOVE_MAX" for issue in issues):
         raise_to("exclusion", "UNIT_PRICE_ABOVE_MAX")
 
+    headroom_registered = registered_cap - accumulated if registered_cap is not None else None
+    headroom_top = top_cap - accumulated
+
     return Analysis(
         accumulated_12m=accumulated,
         projected_12m=projected,
@@ -171,4 +199,8 @@ def analyze(
         registered_category=taxpayer.category if taxpayer else None,
         risk_level=level,
         reasons=tuple(reasons),
+        headroom_registered=headroom_registered,
+        headroom_top=headroom_top,
+        months_to_registered_cap=months_until(headroom_registered, projected_12m=projected),
+        months_to_top_cap=months_until(headroom_top, projected_12m=projected),
     )

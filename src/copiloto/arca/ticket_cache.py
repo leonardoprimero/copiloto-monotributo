@@ -27,6 +27,7 @@ version made: that it belongs to the one certificate in use. Discarding it
 would ask WSAA again and be refused until the ticket expires.
 """
 
+import fcntl
 import json
 import os
 import tempfile
@@ -64,14 +65,26 @@ class TicketCache:
         return _ticket_from(entry) if entry is not None else None
 
     def save(self, ticket: AccessTicket) -> None:
-        """Record this ticket for this certificate, keeping the others, atomically."""
-        tickets = self._read()
-        tickets[self._key(self._certificate)] = {
-            "token": ticket.token,
-            "sign": ticket.sign,
-            "expires_at": ticket.expires_at.isoformat(),
-        }
-        self._write(json.dumps({"tickets": tickets}))
+        """Record this ticket for this certificate, keeping the others, atomically.
+
+        Read, add, write: two processes doing that at once would each read
+        the same file and the second write would drop the first one's ticket.
+        A lock on a sibling file serialises them.
+        """
+        self._path.parent.mkdir(parents=True, exist_ok=True)
+        lock = self._path.with_name(f".{self._path.name}.lock")
+        descriptor = os.open(lock, os.O_RDONLY | os.O_CREAT, 0o600)
+        try:
+            fcntl.flock(descriptor, fcntl.LOCK_EX)
+            tickets = self._read()
+            tickets[self._key(self._certificate)] = {
+                "token": ticket.token,
+                "sign": ticket.sign,
+                "expires_at": ticket.expires_at.isoformat(),
+            }
+            self._write(json.dumps({"tickets": tickets}))
+        finally:
+            os.close(descriptor)  # releases the lock
 
     def _key(self, certificate: str | None) -> str:
         return json.dumps([self._environment, self._service, certificate])

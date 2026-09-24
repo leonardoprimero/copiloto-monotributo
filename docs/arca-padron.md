@@ -207,8 +207,9 @@ perfil = registro.lookup("27-01594221-0")
 archivo guarda una credencial: se crea con permisos `600` a través de un
 temporal de nombre impredecible que reemplaza al anterior de un solo paso,
 guarda un ticket por ambiente, servicio y certificado (WSAA ata el ticket a
-los tres, y dos certificados pueden compartir el archivo sin pisarse), y si no
-se puede leer o no corresponde se ignora. Un archivo guardado por una versión
+los tres, y dos certificados pueden compartir el archivo sin pisarse; las
+escrituras se turnan con un lock vecino, `.ticket.json.lock`), y si no se
+puede leer o no corresponde se ignora. Un archivo guardado por una versión
 anterior no tiene la huella del certificado y se sigue usando igual, porque
 descartarlo pediría otro ticket y WSAA respondería `coe.alreadyAuthenticated`
 hasta que venciera el anterior.

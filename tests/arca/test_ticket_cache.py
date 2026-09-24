@@ -10,8 +10,10 @@ owner, and anything in it that does not match what is being asked for is
 treated as absent rather than trusted.
 """
 
+import fcntl
 import json
 import stat
+import threading
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
@@ -83,9 +85,17 @@ class TestItIsACredential:
         assert stat.S_IMODE(path.stat().st_mode) == 0o600
 
     def test_no_temporary_file_is_left_behind(self, path: Path) -> None:
+        """Only the ticket and the lock that serialises writers remain."""
         cache(path).save(TICKET)
 
-        assert [p.name for p in path.parent.iterdir()] == [path.name]
+        assert sorted(p.name for p in path.parent.iterdir()) == [f".{path.name}.lock", path.name]
+
+    def test_the_lock_file_holds_no_secret_and_is_owner_only(self, path: Path) -> None:
+        cache(path).save(TICKET)
+        lock = path.with_name(f".{path.name}.lock")
+
+        assert lock.read_bytes() == b""
+        assert stat.S_IMODE(lock.stat().st_mode) == 0o600
 
     def test_a_planted_temporary_path_is_not_followed(self, path: Path) -> None:
         """A predictable temporary name is an invitation: whoever plants a
@@ -147,6 +157,44 @@ class TestItIsNotTrustedBlindly:
         path.write_text(json.dumps(legacy))
 
         assert cache(path).load() == TICKET
+
+    def test_two_processes_saving_at_once_do_not_lose_a_ticket(self, path: Path) -> None:
+        """Read, add, write: without a lock two processes read the same file
+        and the second write drops the first one's ticket. The lock is what
+        `save` holds; this test holds it first and watches `save` wait."""
+        other = AccessTicket(token="otro", sign="otra", expires_at=NOW + timedelta(hours=6))  # noqa: S106
+        lock = path.with_name(f".{path.name}.lock")
+        lock.touch()
+        saved = threading.Event()
+
+        with lock.open() as held:
+            fcntl.flock(held, fcntl.LOCK_EX)
+            worker = threading.Thread(
+                target=lambda: (cache(path, certificate="huella-2").save(other), saved.set())
+            )
+            worker.start()
+            assert not saved.wait(0.3), "save went ahead while another writer held the lock"
+            fcntl.flock(held, fcntl.LOCK_UN)
+
+        worker.join(timeout=5)
+        assert saved.is_set()
+        cache(path, certificate="huella-1").save(TICKET)
+        assert cache(path, certificate="huella-1").load() == TICKET
+        assert cache(path, certificate="huella-2").load() == other
+
+    @pytest.mark.parametrize(
+        "content",
+        [
+            json.dumps({"tickets": "no es un mapa"}),
+            json.dumps({"tickets": {"clave": "no es una entrada"}}),
+            json.dumps(["una", "lista"]),
+        ],
+        ids=["tickets-not-a-map", "entry-not-an-object", "file-not-an-object"],
+    )
+    def test_a_malformed_map_is_treated_as_absent(self, path: Path, content: str) -> None:
+        path.write_text(content)
+
+        assert cache(path).load() is None
 
     def test_a_legacy_file_survives_a_save_for_another_certificate(self, path: Path) -> None:
         legacy = {

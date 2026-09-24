@@ -29,7 +29,9 @@ tres cosas que los manuales no muestran.
 - **El temporal de la caché ya no tiene nombre predecible.** Se crea con
   `mkstemp` (exclusivo, `600`, sin seguir symlinks), se sincroniza a disco
   antes de reemplazar al anterior, y el directorio también. Antes, un symlink
-  plantado en `.ticket.json.tmp` desviaba la credencial a donde apuntara.
+  plantado en `.ticket.json.tmp` desviaba la credencial a donde apuntara. Dos
+  procesos que guardan a la vez se turnan con un lock (`.ticket.json.lock`),
+  así ninguno pisa el ticket que el otro acaba de anotar.
 - **Lo guardado se valida antes de usarse.** Un vencimiento sin zona horaria o
   un `token` que no es texto se tratan como ausentes, en vez de fallar en
   medio de una consulta.

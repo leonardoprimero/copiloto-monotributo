@@ -231,7 +231,7 @@ Necesitás [uv](https://docs.astral.sh/uv/) y Python 3.12.
 
 ```sh
 uv sync
-uv run pytest                                   # 750 tests, sin red
+uv run pytest                                   # 777 tests, sin red
 uv run python -m copiloto.evals                 # 14 casos, sin red
 ```
 
@@ -466,11 +466,15 @@ real de un contribuyente.
 
 La consulta al padrón real es otra implementación del mismo Protocol, en
 `arca/`, verificada contra los manuales oficiales de ARCA y probada contra los
-ejemplos que esos manuales publican. **Nunca se ejecutó contra ARCA**: hace
-falta un certificado, y este repositorio no tiene ni pide ninguno. La firma CMS
-y el transporte SOAP quedan como argumentos inyectados, que es donde cada
-despliegue pone los suyos. Está todo en [docs/arca-padron.md](docs/arca-padron.md),
-incluido por qué probablemente no lo necesites.
+ejemplos que esos manuales publican. Parte está además verificada contra el
+servicio en vivo: los endpoints, el sobre SOAP, el contrato del WSDL y que ARCA
+lee el mensaje firmado. La parte autenticada no, y no puede estarlo sin un
+certificado: `getPersona_v2` nunca se ejecutó. ARCA valida el certificado antes
+que todo lo demás, así que ni siquiera un TRA deliberadamente roto llega a ser
+rechazado por estar roto.
+
+Está todo en [docs/arca-padron.md](docs/arca-padron.md), separando qué se
+verificó de qué no, y explicando por qué probablemente no lo necesites.
 
 ## Licencia
 

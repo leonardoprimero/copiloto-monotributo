@@ -5,9 +5,11 @@ que responde qué categoría tiene declarada cada uno. Alcanza para la demo, los
 evals y los tests, y no toca la red.
 
 Este documento describe la otra implementación, la que consulta el padrón real.
-Está escrita y probada contra los ejemplos de los manuales oficiales, pero
-**nunca se ejecutó contra ARCA**: hace falta un certificado, y este repositorio
-no tiene ni pide ninguno.
+Está escrita contra los manuales oficiales y probada contra los ejemplos que
+esos manuales publican. Parte se verificó además contra el servicio en vivo; el
+resto **no puede verificarse sin un certificado**, y este repositorio no tiene
+ni pide ninguno. La sección [Qué se verificó y qué
+no](#qué-se-verificó-y-qué-no) dice exactamente cuál es cuál.
 
 ## Lo primero: puede que no la necesites
 
@@ -109,26 +111,104 @@ es exactamente lo que este proyecto no hace. Si la descripción no empieza con
 una letra de la A a la K, `parse_persona` falla en vez de devolver cualquier
 cosa.
 
-## Qué hay implementado y qué falta
+## El hash: la documentación dice SHA1 y eso no compila
+
+La especificación 1.2.2 pide firmar el TRA con **SHA1+RSA**. Si seguís esa
+línea al pie de la letra, no funciona:
+
+```
+TypeError: hash_algorithm must be one of hashes.SHA224, SHA256, SHA384, or SHA512
+```
+
+`cryptography` retiró SHA1 para firmas. Y `pyafipws` —la referencia en Python
+que sí opera contra AFIP en producción— firma con **SHA256**:
+
+```python
+.add_signer(cert, private_key, hashes.SHA256())
+```
+
+Así que el texto del manual quedó viejo y acá se firma con SHA256. Está fijado
+en un test, porque es el único lugar donde seguir la documentación literalmente
+produce código que no corre.
+
+## Qué hay implementado
 
 Instalación: `uv sync --extra arca`.
 
-| Módulo | Qué hace | Estado |
-| --- | --- | --- |
-| `arca/wsaa.py` | Arma el TRA, parsea el TA, controla el vencimiento | Probado contra los ejemplos del manual |
-| `arca/padron.py` | Parsea `personaReturn` a `TaxpayerProfile` | Probado contra los ejemplos del manual |
-| `arca/registry.py` | `ArcaRegistry`, implementa `TaxpayerRegistry`, cachea el ticket | Probado con dobles |
-| Firma CMS | Firmar el TRA con el certificado | **No implementado** |
-| Transporte SOAP | Hacer las llamadas HTTP | **No implementado** |
+| Módulo | Qué hace |
+| --- | --- |
+| `arca/wsaa.py` | Arma el TRA, parsea el TA, controla el vencimiento |
+| `arca/signing.py` | Firma el TRA como CMS SignedData en base64 |
+| `arca/soap.py` | Arma los sobres, los envía, traduce los faults |
+| `arca/padron.py` | Parsea `personaReturn` a `TaxpayerProfile` |
+| `arca/registry.py` | `ArcaRegistry`, implementa `TaxpayerRegistry`, cachea el ticket |
+| `arca/client.py` | `build_registry(...)` y `service_status(...)` |
 
-Los dos últimos son argumentos inyectados (`sign_cms`, `send`, `call_padron`),
-no código faltante escondido: son la costura donde un despliegue pone su propio
-transporte, sus timeouts y sus reintentos. Esas decisiones dependen de la
-infraestructura de cada uno y no pertenecen a esta librería.
+Con certificado, son dos llamadas:
 
-Para completarlo hacen falta la firma CMS —`cryptography` ya viene en el
-extra— y un cliente SOAP. `pyafipws` es la referencia conocida en Python, con
-licencia GPL.
+```python
+from pathlib import Path
+from copiloto.arca.client import build_registry, service_status
+from copiloto.arca.wsaa import HOMOLOGACION
+
+print(service_status(HOMOLOGACION))   # {'appserver': 'OK', ...}
+
+registro = build_registry(
+    cert_path=Path("certificado.pem"),
+    key_path=Path("clave.key"),
+    represented_cuit="20-11111111-2",
+    environment=HOMOLOGACION,
+)
+perfil = registro.lookup("27-01594221-0")
+```
+
+El transporte HTTP por defecto tiene un timeout y **ningún reintento**, a
+propósito: el manual pide no reintentar ante la mayoría de los errores hasta
+haber resuelto la causa. Se reemplaza con el parámetro `post`.
+
+## Qué se verificó y qué no
+
+Esta es la parte que importa si vas a confiarle algo.
+
+### Verificado contra el servicio en vivo
+
+| Qué | Cómo |
+| --- | --- |
+| Los endpoints del padrón | `dummy()` a homologación y a producción devolvió `appserver/authserver/dbserver: OK` |
+| El sobre SOAP y su namespace | El servicio lo procesó y respondió con la forma documentada |
+| El parseo de la respuesta y de los faults | Un método inexistente devolvió `No such operation 'nada'` |
+| El contrato del WSDL | Bajado de `personaServiceA5?WSDL`: las cinco operaciones y los cuatro parámetros de `getPersona_v2` (`cuitRepresentada` e `idPersona` son `xs:long`, por eso los CUIT viajan sin guiones) |
+| El contrato del WSAA | `loginCms(in0: string) → loginCmsReturn: string`, y el namespace del elemento es `http://wsaa.view.sua.dvadac.desein.afip.gov`, **distinto** del target namespace del servicio |
+| La estructura del CMS | `openssl smime -verify` lo valida y devuelve el TRA intacto; `openssl asn1parse` confirma `pkcs7-signedData` |
+| Que ARCA lee el CMS | Firmando con un certificado autofirmado, el WSAA de homologación responde `Certificado no emitido por AC de confianza`: llegó a leer el certificado adentro del mensaje |
+
+### NO verificado, y por qué no se puede
+
+ARCA valida el certificado **antes** que el resto. Se comprobó mandando cuatro
+variantes con el mismo certificado autofirmado —TRA válido, XML roto,
+`destination` del ambiente equivocado y `expirationTime` vencido— y las cuatro
+devolvieron el mismo error de certificado.
+
+Eso significa que lo siguiente **no quedó probado**, y no puede probarse sin un
+certificado emitido por ARCA:
+
+- que el XML del TRA pase su validación de esquema,
+- que acepten la firma SHA256 (aunque `pyafipws` la usa en producción),
+- que el DN de `destination` sea el correcto para cada ambiente,
+- que las tolerancias de `generationTime` y `expirationTime` estén bien,
+- y todo el flujo del padrón autenticado: `getPersona_v2` nunca se ejecutó.
+
+El parseo de `personaReturn` está probado contra los ejemplos de respuesta del
+manual, no contra respuestas reales.
+
+Para correr el único test que toca la red:
+
+```sh
+COPILOTO_ARCA_LIVE=1 uv run pytest tests/arca/test_soap.py
+```
+
+Está apagado por defecto: una suite de tests no puede depender de que un
+servicio del Estado esté levantado.
 
 ## Antes de usarlo en producción
 

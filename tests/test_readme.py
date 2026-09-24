@@ -87,8 +87,9 @@ class TestExtractorModes:
 class TestArcaHonesty:
     """The padrón client is the one piece that was never run for real."""
 
-    def test_the_readme_says_it_never_ran_against_arca(self) -> None:
-        assert "Nunca se ejecutó contra ARCA" in README
+    def test_the_readme_does_not_overclaim(self) -> None:
+        """Part of the flow is verified live; the authenticated part is not."""
+        assert "getPersona_v2` nunca se ejecutó" in README
 
     def test_the_integration_guide_exists_and_is_linked(self) -> None:
         assert "docs/arca-padron.md" in README
@@ -108,10 +109,24 @@ class TestArcaHonesty:
         assert "nunca pide la clave fiscal" in guide
         assert "Administrador de Relaciones" in guide
 
-    def test_the_guide_says_what_is_not_implemented(self) -> None:
+    def test_the_guide_separates_what_was_verified_from_what_was_not(self) -> None:
         guide = (ROOT / "docs" / "arca-padron.md").read_text(encoding="utf-8")
 
-        assert "**No implementado**" in guide
+        assert "Verificado contra el servicio en vivo" in guide
+        assert "NO verificado, y por qué no se puede" in guide
+
+    def test_the_guide_records_that_arca_checks_the_certificate_first(self) -> None:
+        """It is the reason most of the flow cannot be verified at all."""
+        guide = (ROOT / "docs" / "arca-padron.md").read_text(encoding="utf-8")
+
+        assert "valida el certificado **antes**" in guide
+
+    def test_the_guide_records_the_sha1_finding(self) -> None:
+        """Following the spec literally produces code that cannot run."""
+        guide = (ROOT / "docs" / "arca-padron.md").read_text(encoding="utf-8")
+
+        assert "SHA256" in guide
+        assert "SHA1" in guide
 
 
 class TestOcrAndParallel:

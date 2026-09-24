@@ -5,8 +5,10 @@ deterministic, which is why the whole tax logic can be tested without a model,
 a key or a network.
 """
 
+from datetime import date
 from decimal import Decimal
 
+from copiloto.dates import one_year_before, within_window
 from copiloto.models import ExtractedInvoice, InvoiceItem, Issue
 from copiloto.scales import Scales
 
@@ -46,6 +48,38 @@ def _check_unit_price(
             invoice,
         )
     return None
+
+
+def validate_invoice_dates(invoice: ExtractedInvoice, *, today: date) -> list[Issue]:
+    """Check the issue date against today and against the rolling window.
+
+    A future date is an error: it cannot be a real invoice. A date before the
+    window is merely information, because old invoices are perfectly legitimate
+    and simply do not count towards these twelve months.
+    """
+    if invoice.issue_date > today:
+        return [
+            _issue(
+                "DATE_IN_FUTURE",
+                "error",
+                f"Invoice is dated {invoice.issue_date}, which is after {today}.",
+                invoice,
+            )
+        ]
+
+    if not within_window(invoice.issue_date, today=today):
+        return [
+            _issue(
+                "OUTSIDE_WINDOW",
+                "info",
+                f"Invoice is dated {invoice.issue_date}, before the rolling window "
+                f"that starts after {one_year_before(today)}. It does not count "
+                "towards the last twelve months.",
+                invoice,
+            )
+        ]
+
+    return []
 
 
 def validate_invoice_amounts(invoice: ExtractedInvoice, scales: Scales) -> list[Issue]:

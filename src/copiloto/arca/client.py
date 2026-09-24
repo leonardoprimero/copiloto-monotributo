@@ -16,7 +16,7 @@ from pathlib import Path
 
 from copiloto.arca.padron import NOT_FOUND, PadronError, PersonNotFound
 from copiloto.arca.registry import ArcaRegistry, utc_now
-from copiloto.arca.signing import signer_from_files
+from copiloto.arca.signing import certificate_fingerprint, load_signer, sign_tra
 from copiloto.arca.soap import (
     ENDPOINTS,
     SoapError,
@@ -48,6 +48,16 @@ def service_status(
     return parse_dummy(post(ENDPOINTS[environment], build_dummy_envelope()))
 
 
+def _says_not_found(fault: str) -> bool:
+    """Whether a fault is ARCA's "no such person", read the way a person would.
+
+    The exact wording was recorded from the live service once. Case, spacing
+    and a trailing period are the kind of thing that drifts, and treating the
+    drifted version as a failure would turn "unknown CUIT" into an error.
+    """
+    return " ".join(fault.split()).rstrip(".").casefold() == NOT_FOUND.casefold()
+
+
 def build_registry(
     *,
     cert_path: Path,
@@ -70,9 +80,18 @@ def build_registry(
     ticket lives as long as this registry, and a second process started
     within twelve hours is refused with `coe.alreadyAuthenticated`.
     """
-    sign_cms = signer_from_files(cert_path, key_path, passphrase=passphrase)
+    certificate, key = load_signer(cert_path, key_path, passphrase=passphrase)
+
+    def sign_cms(tra: str) -> str:
+        return sign_tra(tra, certificate, key)
+
     cache = (
-        TicketCache(ticket_cache, environment=environment, service=SERVICE)
+        TicketCache(
+            ticket_cache,
+            environment=environment,
+            service=SERVICE,
+            certificate=certificate_fingerprint(certificate),
+        )
         if ticket_cache is not None
         else None
     )
@@ -115,7 +134,7 @@ def build_registry(
         except SoapError as error:
             # The live service says "does not exist" with a fault, not with the
             # errorConstancia the manual shows. It is an answer, not a failure.
-            if str(error).strip() == NOT_FOUND:
+            if _says_not_found(str(error)):
                 raise PersonNotFound(cuit) from error
             raise PadronError(f"La consulta al padrón falló: {error}") from error
         except Exception as error:

@@ -135,6 +135,22 @@ class TestTheTicketOutlivesTheProcess:
 
         assert len(arca.to("/LoginCms")) == 2
 
+    def test_a_ticket_saved_by_another_certificate_is_not_reused(
+        self, credentials: tuple[Path, Path], tmp_path: Path
+    ) -> None:
+        """Two certificates sharing one cache file must not share the ticket:
+        WSAA bound it to the first one, and the second gets refused."""
+        arca = RecordedArca()
+        saved = tmp_path / "ticket.json"
+        other_directory = tmp_path / "otro"
+        other_directory.mkdir()
+        other_credentials = write_self_signed(other_directory)
+
+        a_registry(credentials, arca, ticket_cache=saved).lookup("27-01594221-0")
+        a_registry(other_credentials, arca, ticket_cache=saved).lookup("27-01594221-0")
+
+        assert len(arca.to("/LoginCms")) == 2
+
     def test_a_cache_that_cannot_be_written_does_not_lose_the_ticket(
         self, credentials: tuple[Path, Path], tmp_path: Path
     ) -> None:
@@ -181,6 +197,15 @@ class TestWhenThePadronSaysNo:
     ) -> None:
         """On the wire, "does not exist" is a fault, not an errorConstancia."""
         registry = a_registry(credentials, FaultingArca(PERSONA_NOT_FOUND_FAULT))
+
+        assert registry.lookup("27-01594221-0") is None
+
+    def test_the_not_found_fault_is_recognised_however_it_is_punctuated(
+        self, credentials: tuple[Path, Path]
+    ) -> None:
+        """The exact string was observed once. Case, spacing and a trailing
+        period are not the kind of thing to lock a taxpayer out over."""
+        registry = a_registry(credentials, FaultingArca("  no existe  persona con ese id. "))
 
         assert registry.lookup("27-01594221-0") is None
 

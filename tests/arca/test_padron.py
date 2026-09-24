@@ -101,6 +101,35 @@ class TestAConstanciaThatCannotBeIssued:
         with pytest.raises(PadronError):
             parse_persona(PERSONA_BLOCKED)
 
+    def test_a_missing_id_persona_leaves_no_hole_in_the_message(self) -> None:
+        response = (
+            "<personaReturn><errorConstancia><error>Un motivo</error>"
+            "</errorConstancia></personaReturn>"
+        )
+
+        with pytest.raises(ConstanciaUnavailable) as error:
+            parse_persona(response)
+
+        assert error.value.cuit == ""
+        assert "for :" not in str(error.value)
+        assert "Un motivo" in str(error.value)
+
+    def test_the_message_keeps_arca_s_words_to_one_bounded_line(self) -> None:
+        """The reasons are kept verbatim; the message is what ends up in a log,
+        so it is one line and it stops somewhere."""
+        long_reason = "linea uno\nlinea dos " + "x" * 5000
+        response = (
+            "<personaReturn><errorConstancia><idPersona>20111111112</idPersona>"
+            f"<error>{long_reason}</error></errorConstancia></personaReturn>"
+        )
+
+        with pytest.raises(ConstanciaUnavailable) as error:
+            parse_persona(response)
+
+        assert error.value.reasons == (long_reason,)
+        assert "\n" not in str(error.value)
+        assert len(str(error.value)) < 400
+
 
 class TestBrokenResponses:
     def test_something_that_is_not_xml_is_an_error(self) -> None:

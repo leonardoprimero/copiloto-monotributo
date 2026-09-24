@@ -34,8 +34,28 @@ def path(tmp_path: Path) -> Path:
     return tmp_path / "ticket.json"
 
 
-def cache(path: Path, *, environment: str = HOMOLOGACION, service: str = SERVICE) -> TicketCache:
-    return TicketCache(path, environment=environment, service=service)
+def cache(
+    path: Path,
+    *,
+    environment: str = HOMOLOGACION,
+    service: str = SERVICE,
+    certificate: str = "huella-1",
+) -> TicketCache:
+    return TicketCache(path, environment=environment, service=service, certificate=certificate)
+
+
+def saved_fields(**changes: object) -> str:
+    """A well-formed file, with some fields replaced."""
+    fields: dict[str, object] = {
+        "environment": HOMOLOGACION,
+        "service": SERVICE,
+        "certificate": "huella-1",
+        "token": TICKET.token,
+        "sign": TICKET.sign,
+        "expires_at": TICKET.expires_at.isoformat(),
+    }
+    fields.update(changes)
+    return json.dumps(fields)
 
 
 class TestRoundTrip:
@@ -67,6 +87,18 @@ class TestItIsACredential:
 
         assert [p.name for p in path.parent.iterdir()] == [path.name]
 
+    def test_a_planted_temporary_path_is_not_followed(self, path: Path) -> None:
+        """A predictable temporary name is an invitation: whoever plants a
+        symlink there first gets the credential written wherever they chose."""
+        victim = path.parent / "victima"
+        victim.write_text("intacto")
+        (path.parent / f".{path.name}.tmp").symlink_to(victim)
+
+        cache(path).save(TICKET)
+
+        assert victim.read_text() == "intacto"
+        assert cache(path).load() == TICKET
+
 
 class TestItIsNotTrustedBlindly:
     def test_a_ticket_for_the_other_environment_is_not_used(self, path: Path) -> None:
@@ -79,6 +111,24 @@ class TestItIsNotTrustedBlindly:
         cache(path, service=SERVICE).save(TICKET)
 
         assert cache(path, service="wsfe").load() is None
+
+    def test_a_ticket_issued_to_another_certificate_is_not_used(self, path: Path) -> None:
+        """WSAA binds the ticket to the certificate that signed the request.
+        Reusing it with another one is refused, and wastes the call."""
+        cache(path, certificate="huella-1").save(TICKET)
+
+        assert cache(path, certificate="huella-2").load() is None
+
+    def test_an_expiry_without_a_timezone_is_treated_as_absent(self, path: Path) -> None:
+        """Comparing it with an aware clock would raise, far from here."""
+        path.write_text(saved_fields(expires_at="2026-09-25T09:00:00"))
+
+        assert cache(path).load() is None
+
+    def test_fields_of_the_wrong_type_are_treated_as_absent(self, path: Path) -> None:
+        path.write_text(saved_fields(token=123))
+
+        assert cache(path).load() is None
 
     def test_a_corrupt_file_is_treated_as_absent(self, path: Path) -> None:
         path.write_text("{no es json")

@@ -20,7 +20,12 @@ import pytest
 from cryptography import x509
 from cryptography.hazmat.primitives.asymmetric import rsa
 
-from copiloto.arca.signing import SigningError, sign_tra, signer_from_files
+from copiloto.arca.signing import (
+    SigningError,
+    certificate_fingerprint,
+    sign_tra,
+    signer_from_files,
+)
 from copiloto.arca.wsaa import build_tra
 from tests.arca.certificates import write_self_signed
 
@@ -173,3 +178,31 @@ class TestBadCredentials:
         certificate = x509.load_pem_x509_certificate(cert_path.read_bytes())
 
         assert sign_tra(build_tra("x", now=NOW), certificate, other)
+
+
+class TestTheFingerprint:
+    """What the ticket cache uses to tell one certificate from another."""
+
+    def test_it_is_stable_for_the_same_certificate(
+        self, credentials: tuple[Path, Path]
+    ) -> None:
+        cert_path, _ = credentials
+        certificate = x509.load_pem_x509_certificate(cert_path.read_bytes())
+
+        first = certificate_fingerprint(certificate)
+
+        assert first == certificate_fingerprint(certificate)
+        assert len(first) == 64
+        assert all(c in "0123456789abcdef" for c in first)
+
+    def test_it_differs_between_certificates(
+        self, credentials: tuple[Path, Path], tmp_path: Path
+    ) -> None:
+        cert_path, _ = credentials
+        other_directory = tmp_path / "otro"
+        other_directory.mkdir()
+        other_path, _ = write_self_signed(other_directory)
+        one = x509.load_pem_x509_certificate(cert_path.read_bytes())
+        other = x509.load_pem_x509_certificate(other_path.read_bytes())
+
+        assert certificate_fingerprint(one) != certificate_fingerprint(other)

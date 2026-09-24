@@ -57,11 +57,18 @@ class ConstanciaUnavailable(PadronError):
     what the taxpayer has to go and fix.
     """
 
+    # ARCA's text is kept whole in `reasons`. The message is what ends up in a
+    # log line, so it is one line and it stops somewhere.
+    _MESSAGE_LIMIT = 240
+
     def __init__(self, cuit: str, reasons: tuple[str, ...]) -> None:
         self.cuit = cuit
         self.reasons = reasons
-        listed = " ".join(reasons) or "ARCA gave no reason."
-        super().__init__(f"ARCA will not issue the constancia for {cuit}: {listed}")
+        whom = cuit or "an unidentified CUIT"
+        listed = " ".join(" ".join(reason.split()) for reason in reasons) or "ARCA gave no reason."
+        if len(listed) > self._MESSAGE_LIMIT:
+            listed = listed[: self._MESSAGE_LIMIT] + "…"
+        super().__init__(f"ARCA will not issue the constancia for {whom}: {listed}")
 
 
 def _formatted_cuit(digits: str) -> str:

@@ -204,8 +204,13 @@ perfil = registro.lookup("27-01594221-0")
 ```
 
 `ticket_cache` es opcional, pero sin él el ticket muere con el proceso. El
-archivo guarda una credencial: se crea con permisos `600`, anota para qué
-ambiente y servicio es, y si no se puede leer o no corresponde se ignora.
+archivo guarda una credencial: se crea con permisos `600` a través de un
+temporal de nombre impredecible que reemplaza al anterior de un solo paso,
+anota para qué ambiente, servicio y certificado es (WSAA ata el ticket a los
+tres), y si no se puede leer o no corresponde se ignora. Un archivo guardado
+por una versión anterior no tiene la huella del certificado, así que se
+descarta y se pide un ticket nuevo: si el anterior seguía vigente, WSAA
+responde `coe.alreadyAuthenticated` hasta que venza.
 
 El transporte HTTP por defecto tiene un timeout y **ningún reintento**, a
 propósito: el manual pide no reintentar ante la mayoría de los errores hasta

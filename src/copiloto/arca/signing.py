@@ -49,6 +49,16 @@ def load_signer(
     return certificate, key
 
 
+def certificate_fingerprint(certificate: x509.Certificate) -> str:
+    """The SHA-256 of the DER certificate, as lowercase hex.
+
+    Not a secret: it is what the ticket cache uses to tell which certificate a
+    ticket was issued to, because WSAA binds every ticket to the one that
+    signed the request.
+    """
+    return certificate.fingerprint(hashes.SHA256()).hex()
+
+
 def sign_tra(tra: str, certificate: x509.Certificate, private_key) -> str:
     """Wrap the TRA in a base64 CMS SignedData message, ready for `loginCms`.
 

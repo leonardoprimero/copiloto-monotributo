@@ -19,6 +19,24 @@ tres cosas que los manuales no muestran.
   escribir la caché (permisos, disco lleno) avisa con un `RuntimeWarning` y
   devuelve el ticket igual; antes la excepción lo tiraba a la basura recién
   emitido, con el mismo bloqueo de doce horas. Lo detectó la revisión de código.
+- **La caché del ticket ahora sabe de qué certificado es.** WSAA ata cada
+  ticket al certificado que firmó el pedido; dos certificados compartiendo el
+  archivo se prestaban el ticket y el segundo era rechazado. El archivo guarda
+  la huella SHA-256 del certificado y un ticket ajeno se ignora. Un archivo
+  de la versión anterior se descarta y se pide uno nuevo.
+- **El temporal de la caché ya no tiene nombre predecible.** Se crea con
+  `mkstemp` (exclusivo, `600`, sin seguir symlinks) y se sincroniza a disco
+  antes de reemplazar al anterior. Antes, un symlink plantado en
+  `.ticket.json.tmp` desviaba la credencial a donde apuntara.
+- **Lo guardado se valida antes de usarse.** Un vencimiento sin zona horaria o
+  un `token` que no es texto se tratan como ausentes, en vez de fallar en
+  medio de una consulta.
+- **El fault "No existe persona con ese Id" se reconoce aunque cambie la
+  puntuación, el espaciado o las mayúsculas.** El texto exacto se observó una
+  sola vez; una variante mínima habría convertido "CUIT desconocida" en error.
+- **El mensaje de `ConstanciaUnavailable` es una sola línea acotada**, sin
+  agujero cuando ARCA no manda `idPersona`. Los motivos siguen enteros en
+  `.reasons`.
 - **Una constancia bloqueada ya no se confunde con "no es monotributista".** Una
   CUIT cancelada, o bloqueada por falta de datos biométricos, lanza
   `ConstanciaUnavailable` con los motivos textuales de ARCA en vez de devolver

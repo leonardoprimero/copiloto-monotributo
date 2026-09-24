@@ -1,0 +1,41 @@
+name: CI
+
+# Proves the claim the README makes: a fresh clone runs everything with no API
+# key, no AI CLI and no network access to a provider.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+
+      - name: Install the project
+        run: uv sync --dev
+
+      - name: Tests
+        run: uv run python -m pytest
+
+      - name: Evals
+        # The offline suite is deterministic, so anything below 100% is a bug.
+        run: uv run python -m copiloto.evals --extractor fake --threshold 1.0
+
+      - name: Types
+        run: uv run --with pyright pyright
+
+      - name: No AI attribution in commit messages
+        run: |
+          pattern='co-authored-by|generated with claude'
+          if git log --format='%B' | grep -qiE "$pattern"; then
+            echo "Found AI attribution in a commit message."
+            exit 1
+          fi

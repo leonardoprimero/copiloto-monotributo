@@ -1,5 +1,7 @@
 # Copiloto Monotributo
 
+[![CI](https://github.com/leonardoprimero/copiloto-monotributo/actions/workflows/ci.yml/badge.svg)](https://github.com/leonardoprimero/copiloto-monotributo/actions/workflows/ci.yml)
+
 Un copiloto para monotributistas, hecho con LangGraph. Lee facturas con un
 modelo, las verifica con código, y te dice en qué categoría te ubican tus
 ingresos y qué tan cerca estás de quedar excluido del régimen.
@@ -201,7 +203,29 @@ uv run copiloto run --case evals/cases/category_change.json
 uv run copiloto run --case evals/cases/category_change.json --auto-resume
 ```
 
-Con tu propio CLI de IA, sin clave:
+### Con tus propias facturas
+
+Poné tus comprobantes en una carpeta — `.txt` o `.pdf` — y decí en qué
+categoría estás registrado:
+
+```sh
+uv run copiloto run \
+  --invoices-dir ~/mis-facturas \
+  --cuit 20-11111111-2 \
+  --category A \
+  --extractor cli
+```
+
+**No hace falta ninguna credencial de ARCA.** Lo único que una consulta al
+padrón aportaría es la categoría en la que estás registrado, y esa letra ya la
+sabés: está en tu credencial y en el pago mensual. Preferímos preguntártela
+antes que sostener la clave fiscal de nadie.
+
+Los PDF de ARCA suelen traer el texto embebido, así que se leen directo. Si un
+PDF es una imagen escaneada, el programa te lo dice y frena: **nunca saltea una
+factura en silencio**, porque eso bajaría tu acumulado sin que te enteres.
+
+Con `--extractor cli` usás la herramienta de IA que ya tengas, sin clave:
 
 ```sh
 COPILOTO_EXTRACTOR=cli uv run copiloto run --case evals/cases/all_in_order.json

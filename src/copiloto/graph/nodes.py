@@ -11,10 +11,12 @@ keeps these small enough to read in one go.
 
 from datetime import date
 
+from langgraph.types import interrupt
+
 from copiloto.analysis import RiskPolicy, analyze
 from copiloto.extractors.protocol import ExtractionError, InvoiceExtractor
 from copiloto.graph.state import CopilotState
-from copiloto.models import ExtractedInvoice, Issue
+from copiloto.models import ExtractedInvoice, HumanDecision, Issue
 from copiloto.registry import TaxpayerRegistry
 from copiloto.report import render_report
 from copiloto.scales import Scales
@@ -155,15 +157,29 @@ def build_review_alert(state: CopilotState) -> dict:
 
 
 def make_review_node():
-    """Build the human-in-the-loop node.
+    """Build the node that hands the case to an accountant.
 
-    Replaced in the next step by the real `interrupt()` pause; for now it lets
-    the graph be wired and the routing tested end to end.
+    `interrupt()` suspends the run, persists a checkpoint and surfaces the
+    payload to whoever invoked the graph. The caller resumes with
+    `Command(resume=...)`, and that value is what `interrupt()` returns here.
+
+    Measured against langgraph 1.2.12: resuming re-runs this function from its
+    first line. Only the pure alert builder may run before the pause; the
+    decision is written after it, so nothing happens twice.
     """
 
     def request_accountant_review(state: CopilotState) -> dict:
-        build_review_alert(state)
-        return {}
+        answer = interrupt(build_review_alert(state))
+
+        return {
+            "human_decision": HumanDecision(
+                verdict=answer["verdict"],
+                notes=answer.get("notes", ""),
+                # Defaults to the accountant: an automatic resume has to say so
+                # explicitly rather than inherit a human's authority by omission.
+                reviewer=answer.get("reviewer", "accountant"),
+            )
+        }
 
     return request_accountant_review
 

@@ -24,6 +24,7 @@ from copiloto.graph.nodes import (
     make_validate_node,
 )
 from copiloto.graph.routing import make_router
+from copiloto.graph.serde import copilot_serde
 from copiloto.graph.state import CopilotState
 from copiloto.registry import TaxpayerRegistry
 from copiloto.scales import Scales
@@ -42,7 +43,8 @@ def build_graph(
 
     A checkpointer is always present because `interrupt()` requires one; an
     in-memory saver is enough while the process stays alive between the pause
-    and the resume.
+    and the resume. Its serializer declares this project's types explicitly so
+    the state survives the pause unchanged.
     """
     workflow = StateGraph(CopilotState)
 
@@ -70,4 +72,6 @@ def build_graph(
     workflow.add_edge("request_accountant_review", "write_report")
     workflow.add_edge("write_report", END)
 
-    return workflow.compile(checkpointer=checkpointer or InMemorySaver())
+    return workflow.compile(
+        checkpointer=checkpointer or InMemorySaver(serde=copilot_serde())
+    )

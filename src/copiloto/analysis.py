@@ -47,6 +47,13 @@ class Analysis:
     risk_level: RiskLevel
     reasons: tuple[str, ...]
 
+    def __post_init__(self) -> None:
+        # Checkpoint deserialization hands back a list, so an Analysis restored
+        # after a pause would not compare equal to the one that was saved.
+        # Normalizing here makes the type hold whatever the source was.
+        if not isinstance(self.reasons, tuple):
+            object.__setattr__(self, "reasons", tuple(self.reasons))
+
 
 def invoices_in_window(
     invoices: tuple[ExtractedInvoice, ...], *, today: date

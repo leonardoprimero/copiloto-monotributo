@@ -460,18 +460,16 @@ src/copiloto/
 
 Fuera de alcance por ahora, listado para que nadie asuma lo contrario: las
 causales de exclusión que no dependen de un parámetro declarable, los usuarios
-y permisos de la web más allá de una clave compartida, la firma CMS y el
-transporte SOAP del cliente de ARCA, y cualquier llamada real a ARCA o dato
-real de un contribuyente.
+y permisos de la web más allá de una clave compartida, conectar el padrón real
+a la CLI y a la web, y cualquier dato real de un contribuyente.
 
 La consulta al padrón real es otra implementación del mismo Protocol, en
-`arca/`, verificada contra los manuales oficiales de ARCA y probada contra los
-ejemplos que esos manuales publican. Parte está además verificada contra el
-servicio en vivo: los endpoints, el sobre SOAP, el contrato del WSDL y que ARCA
-lee el mensaje firmado. La parte autenticada no, y no puede estarlo sin un
-certificado: `getPersona_v2` nunca se ejecutó. ARCA valida el certificado antes
-que todo lo demás, así que ni siquiera un TRA deliberadamente roto llega a ser
-rechazado por estar roto.
+`arca/`, escrita contra los manuales oficiales de ARCA.
+`getPersona_v2` se ejecutó en homologación con un certificado emitido por
+ARCA: ticket del WSAA, consulta autenticada y respuestas reales, que quedaron
+grabadas como fixtures. Esa primera corrida encontró tres lugares donde el
+servicio no se comporta como el manual, y los tres están corregidos y fijados
+en tests. Producción no se probó.
 
 Está todo en [docs/arca-padron.md](docs/arca-padron.md), separando qué se
 verificó de qué no, y explicando por qué probablemente no lo necesites.

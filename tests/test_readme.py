@@ -85,11 +85,14 @@ class TestExtractorModes:
 
 
 class TestArcaHonesty:
-    """The padrón client is the one piece that was never run for real."""
+    """The padrón client ran against homologación, and only against it."""
 
-    def test_the_readme_does_not_overclaim(self) -> None:
-        """Part of the flow is verified live; the authenticated part is not."""
-        assert "getPersona_v2` nunca se ejecutó" in README
+    def test_the_readme_says_it_ran_in_homologacion(self) -> None:
+        assert "`getPersona_v2` se ejecutó en homologación" in README
+
+    def test_the_readme_does_not_overclaim_production(self) -> None:
+        """A test certificate proves the test service, nothing more."""
+        assert "Producción no se probó" in README
 
     def test_the_integration_guide_exists_and_is_linked(self) -> None:
         assert "docs/arca-padron.md" in README
@@ -113,13 +116,27 @@ class TestArcaHonesty:
         guide = (ROOT / "docs" / "arca-padron.md").read_text(encoding="utf-8")
 
         assert "Verificado contra el servicio en vivo" in guide
-        assert "NO verificado, y por qué no se puede" in guide
+        assert "Todavía sin verificar" in guide
 
     def test_the_guide_records_that_arca_checks_the_certificate_first(self) -> None:
         """It is the reason most of the flow cannot be verified at all."""
         guide = (ROOT / "docs" / "arca-padron.md").read_text(encoding="utf-8")
 
         assert "valida el certificado **antes**" in guide
+
+    def test_the_guide_records_where_the_wire_contradicts_the_manual(self) -> None:
+        """Both broke the client on its first real call."""
+        guide = (ROOT / "docs" / "arca-padron.md").read_text(encoding="utf-8")
+
+        assert "loginCmsReturn" in guide
+        assert "No existe persona con ese Id" in guide
+        assert "ConstanciaUnavailable" in guide
+
+    def test_the_guide_explains_the_ticket_cache(self) -> None:
+        guide = (ROOT / "docs" / "arca-padron.md").read_text(encoding="utf-8")
+
+        assert "ticket_cache=" in guide
+        assert "coe.alreadyAuthenticated" in guide
 
     def test_the_guide_records_the_sha1_finding(self) -> None:
         """Following the spec literally produces code that cannot run."""

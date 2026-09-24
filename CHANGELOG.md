@@ -3,6 +3,41 @@
 Formato basado en [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/).
 Este proyecto usa [versionado semántico](https://semver.org/lang/es/).
 
+## [Sin publicar]
+
+El cliente del padrón corrió por primera vez contra ARCA, en homologación y con
+un certificado emitido por WSASS. Funcionó de punta a punta después de corregir
+tres cosas que los manuales no muestran.
+
+### Corregido
+
+- **El ticket del WSAA ahora se lee.** Llega como texto escapado dentro de
+  `loginCmsReturn`, no como elementos, así que el cliente fallaba *después* de
+  que ARCA lo emitía. Un reintento habría quedado bloqueado doce horas con
+  `coe.alreadyAuthenticated`.
+- **Una constancia bloqueada ya no se confunde con "no es monotributista".** Una
+  CUIT cancelada, o bloqueada por falta de datos biométricos, lanza
+  `ConstanciaUnavailable` con los motivos textuales de ARCA en vez de devolver
+  `None`.
+- **Un CUIT inexistente devuelve `None`.** El servicio lo dice con un SOAP fault,
+  no con el `errorConstancia` del manual, y el cliente lo trataba como falla.
+
+### Agregado
+
+- **El ticket puede guardarse en disco** (`build_registry(ticket_cache=...)`),
+  con permisos `600` y escritura atómica, para que un proceso nuevo no quede
+  afuera mientras el anterior siga vigente.
+- `build_registry` acepta un reloj, como ya lo hacía `ArcaRegistry`.
+- Respuestas reales de homologación grabadas como fixtures, y un test que arma
+  el cliente completo contra ellas. Reprodujo offline la falla del primer
+  intento antes de corregirla.
+
+### Verificado contra ARCA
+
+En homologación: el esquema del TRA, la firma SHA256, el DN de `destination`, las
+tolerancias de tiempo, `getPersona_v2` autenticado y el parseo de respuestas
+reales. Queda sin verificar: producción y la delegación de un tercero.
+
 ## [0.3.0] - 2026-09-24
 
 Las facturas escaneadas ahora se leen, las lecturas van en paralelo, la web
@@ -120,6 +155,7 @@ Primera versión: el grafo completo, de las facturas al informe.
 - CI que prueba que un clone limpio corre todo sin API key, sin herramienta de
   IA y sin red.
 
+[Sin publicar]: https://github.com/leonardoprimero/copiloto-monotributo/compare/v0.3.0...HEAD
 [0.3.0]: https://github.com/leonardoprimero/copiloto-monotributo/releases/tag/v0.3.0
 [0.2.0]: https://github.com/leonardoprimero/copiloto-monotributo/releases/tag/v0.2.0
 [0.1.0]: https://github.com/leonardoprimero/copiloto-monotributo/releases/tag/v0.1.0

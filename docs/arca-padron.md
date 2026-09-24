@@ -5,10 +5,10 @@ que responde qué categoría tiene declarada cada uno. Alcanza para la demo, los
 evals y los tests, y no toca la red.
 
 Este documento describe la otra implementación, la que consulta el padrón real.
-Está escrita contra los manuales oficiales y probada contra los ejemplos que
-esos manuales publican. Parte se verificó además contra el servicio en vivo; el
-resto **no puede verificarse sin un certificado**, y este repositorio no tiene
-ni pide ninguno. La sección [Qué se verificó y qué
+Está escrita contra los manuales oficiales y **se ejecutó de punta a punta en
+homologación** con un certificado emitido por ARCA: ticket del WSAA, consulta
+autenticada y respuestas reales. Producción no se probó. El repositorio no
+trae ni pide ningún certificado. La sección [Qué se verificó y qué
 no](#qué-se-verificó-y-qué-no) dice exactamente cuál es cuál.
 
 ## Lo primero: puede que no la necesites
@@ -45,6 +45,23 @@ esa autorización cuando quiera, sin avisarte y sin pedirte nada.
 Si el paso 3 no ocurrió, el WSAA responde `coe.notAuthorized` y no hay consulta
 posible. Es así por diseño, y está bien que sea así.
 
+### Para probar en homologación
+
+El certificado de testing se saca desde WSASS, con tu clave fiscal, y todo se
+hace desde ahí: crear el certificado y autorizarlo al servicio. Tres cosas que
+no están escritas en ningún lado y cuestan un intento cada una:
+
+- **La clave privada se genera en tu máquina.** A WSASS solo le pegás el CSR:
+  `openssl req -new -key clave.key -subj "/C=AR/O=.../CN=.../serialNumber=CUIT
+  20XXXXXXXXX"`. El `serialNumber` tiene que ser el CUIT de la sesión.
+- **El nombre simbólico del DN admite solo letras y números.** Con un guion,
+  WSASS rechaza el formulario.
+- **WSASS reemplaza el CN del CSR por ese nombre simbólico.** El DN emitido es
+  `SERIALNUMBER=CUIT ..., CN=<alias>`, así que el CN que pusiste no importa.
+
+Para probar sin un tercero, la CUIT representada puede ser la tuya: WSASS
+autoriza el servicio sobre tu propia CUIT en el mismo formulario.
+
 ## El flujo técnico
 
 ### WSAA: conseguir el ticket
@@ -59,6 +76,14 @@ versión 1.2.2.
 3. Codificarlo en Base64.
 4. Invocar `loginCms` y leer `token` y `sign` del `LoginTicketResponse.xml`.
 
+El paso 4 tiene una trampa que el manual no muestra. Su ejemplo es el
+`LoginTicketResponse.xml` pelado; lo que llega por la red es un sobre SOAP cuyo
+`loginCmsReturn` trae ese documento **como texto escapado**. Leerlo como
+elementos no encuentra ningún `<token>`, y para ese momento ARCA ya emitió el
+ticket. El primer intento real de este cliente falló exactamente así, y un
+reintento habría quedado bloqueado doce horas. `parse_login_response` desarma el
+sobre antes de leer el ticket.
+
 | Ambiente | Endpoint del WSAA |
 | --- | --- |
 | Producción | `https://wsaa.afip.gov.ar/ws/services/LoginCms` |
@@ -68,7 +93,9 @@ Tres reglas del manual que el código respeta y que conviene tener presentes:
 
 - **El ticket dura 12 horas y hay que reusarlo.** Pedir otro teniendo uno
   válido devuelve `coe.alreadyAuthenticated`, que es un error. Por eso
-  `ArcaRegistry` cachea el ticket; no es una optimización.
+  `ArcaRegistry` cachea el ticket, y con `ticket_cache=` lo guarda en disco
+  para que sobreviva al proceso: si no, el siguiente proceso queda afuera
+  hasta que venza. No es una optimización.
 - `generationTime` admite hasta 24 horas de antigüedad y `expirationTime` hasta
   24 horas hacia adelante. Fuera de eso la solicitud se rechaza, y la causa
   habitual es un reloj desincronizado.
@@ -90,10 +117,22 @@ llamaba `ws_sr_padron_a5`). El método vigente es `getPersona_v2(token, sign,
 cuitRepresentada, idPersona)`; `getPersonaList_v2` acepta hasta 250 CUITs.
 `dummy()` verifica disponibilidad y es el único método sin autenticación.
 
-La respuesta trae `datosGenerales` y después `datosMonotributo`,
-`datosRegimenGeneral`, o un `errorConstancia` si el CUIT no existe. El copiloto
-lee **solo** la categoría de monotributo. El resto es el perfil fiscal de una
-persona y no es asunto suyo: no se guarda, no se loguea y no se pasa a nadie.
+La respuesta trae `datosGenerales` y después `datosMonotributo` o
+`datosRegimenGeneral`. El copiloto lee **solo** la categoría de monotributo. El
+resto es el perfil fiscal de una persona y no es asunto suyo: no se guarda, no
+se loguea y no se pasa a nadie.
+
+Cuando no hay constancia, el servicio real no se comporta como el manual:
+
+| Situación | Qué dice el manual | Qué responde el servicio | Qué devuelve `lookup` |
+| --- | --- | --- | --- |
+| El CUIT no existe | `errorConstancia` con `No existe persona con ese Id` | Un SOAP fault con ese mismo texto | `None` |
+| El CUIT existe pero no se certifica (cancelado, bloqueado por datos biométricos) | Nada | `errorConstancia` con los motivos | `ConstanciaUnavailable`, con los motivos de ARCA textuales |
+| Régimen general | `datosRegimenGeneral` | Igual | `None` |
+
+El segundo caso es el que importa. Tratarlo como "no es monotributista" ocultaría
+justo la situación que alguien necesita escuchar, así que es un error: una
+subclase de `PadronError` con los motivos en `reasons`.
 
 #### La categoría viene dos veces
 
@@ -142,6 +181,7 @@ Instalación: `uv sync --extra arca`.
 | `arca/soap.py` | Arma los sobres, los envía, traduce los faults |
 | `arca/padron.py` | Parsea `personaReturn` a `TaxpayerProfile` |
 | `arca/registry.py` | `ArcaRegistry`, implementa `TaxpayerRegistry`, cachea el ticket |
+| `arca/ticket_cache.py` | Guarda el ticket en disco, con permisos de dueño y escritura atómica |
 | `arca/client.py` | `build_registry(...)` y `service_status(...)` |
 
 Con certificado, son dos llamadas:
@@ -158,9 +198,14 @@ registro = build_registry(
     key_path=Path("clave.key"),
     represented_cuit="20-11111111-2",
     environment=HOMOLOGACION,
+    ticket_cache=Path("ticket.json"),
 )
 perfil = registro.lookup("27-01594221-0")
 ```
+
+`ticket_cache` es opcional, pero sin él el ticket muere con el proceso. El
+archivo guarda una credencial: se crea con permisos `600`, anota para qué
+ambiente y servicio es, y si no se puede leer o no corresponde se ignora.
 
 El transporte HTTP por defecto tiene un timeout y **ningún reintento**, a
 propósito: el manual pide no reintentar ante la mayoría de los errores hasta
@@ -181,25 +226,35 @@ Esta es la parte que importa si vas a confiarle algo.
 | El contrato del WSAA | `loginCms(in0: string) → loginCmsReturn: string`, y el namespace del elemento es `http://wsaa.view.sua.dvadac.desein.afip.gov`, **distinto** del target namespace del servicio |
 | La estructura del CMS | `openssl smime -verify` lo valida y devuelve el TRA intacto; `openssl asn1parse` confirma `pkcs7-signedData` |
 | Que ARCA lee el CMS | Firmando con un certificado autofirmado, el WSAA de homologación responde `Certificado no emitido por AC de confianza`: llegó a leer el certificado adentro del mensaje |
+| El TRA completo | Con un certificado emitido por WSASS, el WSAA de homologación emitió un ticket. Eso valida de una vez el esquema del TRA, la firma **SHA256**, el DN de `destination` de homologación y las tolerancias de tiempo |
+| La respuesta real del WSAA | El ticket llega escapado dentro de `loginCmsReturn`, no como elementos. Grabada en `tests/arca/recorded.py` |
+| `getPersona_v2` autenticado | Aceptado con `cuitRepresentada` igual a la CUIT del certificado. Un monotributista de la base de prueba volvió con categoría B, leída de una respuesta real |
+| Un CUIT inexistente | SOAP fault `No existe persona con ese Id`, no un `errorConstancia` |
+| Una constancia bloqueada | `errorConstancia` con tres motivos: CUIT cancelada, domicilio fiscal electrónico pendiente, y datos biométricos sin registrar |
+| El ticket en disco | Tres consultas desde un proceso nuevo usaron el ticket guardado y ninguna volvió a llamar al WSAA |
 
-### NO verificado, y por qué no se puede
+Las respuestas grabadas son fixtures de `tests/arca/test_client.py`, que arma
+el cliente completo y le responde con ellas. Ese test reprodujo offline la falla
+del primer intento real antes de que se corrigiera.
 
-ARCA valida el certificado **antes** que el resto. Se comprobó mandando cuatro
-variantes con el mismo certificado autofirmado —TRA válido, XML roto,
+### Cómo se llegó hasta acá
+
+Sin certificado, ARCA valida el certificado **antes** que el resto. Se comprobó
+mandando cuatro variantes con un certificado autofirmado —TRA válido, XML roto,
 `destination` del ambiente equivocado y `expirationTime` vencido— y las cuatro
-devolvieron el mismo error de certificado.
+devolvieron el mismo error de certificado. Por eso nada del flujo autenticado
+podía probarse sin tramitar uno en WSASS.
 
-Eso significa que lo siguiente **no quedó probado**, y no puede probarse sin un
-certificado emitido por ARCA:
+### Todavía sin verificar
 
-- que el XML del TRA pase su validación de esquema,
-- que acepten la firma SHA256 (aunque `pyafipws` la usa en producción),
-- que el DN de `destination` sea el correcto para cada ambiente,
-- que las tolerancias de `generationTime` y `expirationTime` estén bien,
-- y todo el flujo del padrón autenticado: `getPersona_v2` nunca se ejecutó.
-
-El parseo de `personaReturn` está probado contra los ejemplos de respuesta del
-manual, no contra respuestas reales.
+- **Producción.** Otro certificado, otra autoridad certificante y otro DN de
+  `destination`. Que homologación funcione lo hace probable, no seguro.
+- **Una delegación de un tercero.** En homologación la CUIT representada fue la
+  propia. Que otro contribuyente delegue desde su Administrador de Relaciones, y
+  que eso aparezca en la sección `relations` del ticket, no se ejecutó.
+- **`coe.alreadyAuthenticated`.** Está documentado y el caché existe para
+  evitarlo, pero no se provocó a propósito para ver el mensaje exacto.
+- **`getPersonaList_v2`**, que el cliente no usa.
 
 Para correr el único test que toca la red:
 
@@ -218,5 +273,5 @@ servicio del Estado esté levantado.
   enterarse antes de que pase.
 - Usá primero homologación. Los endpoints y los DN de destino son distintos en
   cada ambiente, y confundirlos da errores que parecen de permisos.
-- Nada de esto se probó contra ARCA. Probalo vos en homologación antes de
-  confiarle un dato real.
+- Se probó en homologación, no en producción. Hacé tu propia prueba en
+  homologación con tu certificado antes de confiarle un dato real.

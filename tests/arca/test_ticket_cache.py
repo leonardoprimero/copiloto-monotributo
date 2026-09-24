@@ -10,7 +10,6 @@ owner, and anything in it that does not match what is being asked for is
 treated as absent rather than trusted.
 """
 
-import fcntl
 import json
 import stat
 import threading
@@ -21,6 +20,8 @@ import pytest
 
 from copiloto.arca.ticket_cache import TicketCache
 from copiloto.arca.wsaa import HOMOLOGACION, PRODUCCION, AccessTicket
+
+fcntl = pytest.importorskip("fcntl", reason="the ticket cache locks with flock, a POSIX call")
 
 NOW = datetime(2026, 9, 24, 21, 0, tzinfo=UTC)
 SERVICE = "ws_sr_constancia_inscripcion"
@@ -182,11 +183,35 @@ class TestItIsNotTrustedBlindly:
         assert cache(path, certificate="huella-1").load() == TICKET
         assert cache(path, certificate="huella-2").load() == other
 
+    def test_a_writer_that_never_lets_go_is_given_up_on(self, path: Path) -> None:
+        """Waiting forever for the lock would hang the lookup. After a bounded
+        wait, save fails like any other write failure and the ticket stays in
+        memory, which the client already knows how to handle."""
+        lock = path.with_name(f".{path.name}.lock")
+        lock.touch()
+
+        with lock.open() as held:
+            fcntl.flock(held, fcntl.LOCK_EX)
+            with pytest.raises(OSError, match="lock"):
+                TicketCache(
+                    path, environment=HOMOLOGACION, service=SERVICE, certificate="x", lock_wait=0.2
+                ).save(TICKET)
+
+    def test_a_planted_lock_path_is_not_followed(self, path: Path) -> None:
+        victim = path.parent / "victima"
+        victim.write_text("intacto")
+        path.with_name(f".{path.name}.lock").symlink_to(victim)
+
+        with pytest.raises(OSError):
+            cache(path).save(TICKET)
+
+        assert victim.read_text() == "intacto"
+
     @pytest.mark.parametrize(
         "content",
         [
             json.dumps({"tickets": "no es un mapa"}),
-            json.dumps({"tickets": {"clave": "no es una entrada"}}),
+            json.dumps({"tickets": {json.dumps([HOMOLOGACION, SERVICE, "huella-1"]): "texto"}}),
             json.dumps(["una", "lista"]),
         ],
         ids=["tickets-not-a-map", "entry-not-an-object", "file-not-an-object"],
@@ -195,6 +220,22 @@ class TestItIsNotTrustedBlindly:
         path.write_text(content)
 
         assert cache(path).load() is None
+
+    def test_a_legacy_file_is_read_by_whichever_certificate_asks(self, path: Path) -> None:
+        """Pinned on purpose: the old format never said whose ticket it was, and
+        the previous version handed it to the one certificate in use. A
+        certificate it does not belong to gets one refused call, not a
+        twelve-hour lockout; the other way round would."""
+        legacy = {
+            "environment": HOMOLOGACION,
+            "service": SERVICE,
+            "token": TICKET.token,
+            "sign": TICKET.sign,
+            "expires_at": TICKET.expires_at.isoformat(),
+        }
+        path.write_text(json.dumps(legacy))
+
+        assert cache(path, certificate="cualquiera").load() == TICKET
 
     def test_a_legacy_file_survives_a_save_for_another_certificate(self, path: Path) -> None:
         legacy = {

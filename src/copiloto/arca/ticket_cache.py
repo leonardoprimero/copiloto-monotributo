@@ -27,14 +27,19 @@ version made: that it belongs to the one certificate in use. Discarding it
 would ask WSAA again and be refused until the ticket expires.
 """
 
-import fcntl
 import json
 import os
 import tempfile
+import time
 from datetime import datetime
 from pathlib import Path
 
 from copiloto.arca.wsaa import AccessTicket
+
+try:
+    import fcntl
+except ImportError:  # pragma: no cover - Windows has no flock; writers are not serialised there
+    fcntl = None
 
 
 class TicketCache:
@@ -45,11 +50,20 @@ class TicketCache:
     uses.
     """
 
-    def __init__(self, path: Path, *, environment: str, service: str, certificate: str) -> None:
+    def __init__(
+        self,
+        path: Path,
+        *,
+        environment: str,
+        service: str,
+        certificate: str,
+        lock_wait: float = 5.0,
+    ) -> None:
         self._path = path
         self._environment = environment
         self._service = service
         self._certificate = certificate
+        self._lock_wait = lock_wait
 
     def load(self) -> AccessTicket | None:
         """The saved ticket, or None when there is none worth using.
@@ -69,13 +83,15 @@ class TicketCache:
 
         Read, add, write: two processes doing that at once would each read
         the same file and the second write would drop the first one's ticket.
-        A lock on a sibling file serialises them.
+        A lock on a sibling file serialises them. A writer that never lets go
+        is given up on after `lock_wait` seconds with an OSError, the same
+        failure as any other write: the ticket stays in memory.
         """
         self._path.parent.mkdir(parents=True, exist_ok=True)
         lock = self._path.with_name(f".{self._path.name}.lock")
-        descriptor = os.open(lock, os.O_RDONLY | os.O_CREAT, 0o600)
+        descriptor = os.open(lock, os.O_RDONLY | os.O_CREAT | os.O_NOFOLLOW | os.O_CLOEXEC, 0o600)
         try:
-            fcntl.flock(descriptor, fcntl.LOCK_EX)
+            self._acquire(descriptor, lock)
             tickets = self._read()
             tickets[self._key(self._certificate)] = {
                 "token": ticket.token,
@@ -85,6 +101,22 @@ class TicketCache:
             self._write(json.dumps({"tickets": tickets}))
         finally:
             os.close(descriptor)  # releases the lock
+
+    def _acquire(self, descriptor: int, lock: Path) -> None:
+        if fcntl is None:
+            return
+        deadline = time.monotonic() + self._lock_wait
+        while True:
+            try:
+                fcntl.flock(descriptor, fcntl.LOCK_EX | fcntl.LOCK_NB)
+                return
+            except BlockingIOError:
+                if time.monotonic() >= deadline:
+                    raise OSError(
+                        f"Another process has held the ticket cache lock {lock} "
+                        f"for more than {self._lock_wait:g}s."
+                    ) from None
+                time.sleep(0.05)
 
     def _key(self, certificate: str | None) -> str:
         return json.dumps([self._environment, self._service, certificate])

@@ -1,0 +1,29 @@
+{
+  "source": "https://www.arca.gob.ar/monotributo/categorias.asp",
+  "source_title": "ARCA - Valores de aplicacion desde el 1/08/2026",
+  "effective_from": "2026-08-01",
+  "retrieved_on": "2026-09-24",
+  "currency": "ARS",
+  "income_caps_depend_on_activity": false,
+  "notes": [
+    "Amounts are strings so they parse into Decimal without passing through float.",
+    "The published table splits 'locaciones y prestaciones de servicios' from 'venta de cosas muebles' only in the monthly tax columns (impuesto integrado, total). The gross income caps are a single column shared by both activities, so categories H-K are reachable by service providers as well.",
+    "Monthly contributions are intentionally absent: this project estimates category and exclusion risk, it never computes what you owe.",
+    "Caps are inclusive: 'hasta X' means income <= X.",
+    "These values are updated every semester. Refresh this file from the source and rerun the tests."
+  ],
+  "max_unit_price": "716840.77",
+  "categories": [
+    {"name": "A", "income_cap": "12009410.45", "surface_cap_m2": 30, "annual_energy_cap_kwh": 3330, "annual_rent_cap": "2792886.15"},
+    {"name": "B", "income_cap": "17595182.74", "surface_cap_m2": 45, "annual_energy_cap_kwh": 5000, "annual_rent_cap": "2792886.15"},
+    {"name": "C", "income_cap": "24670494.31", "surface_cap_m2": 60, "annual_energy_cap_kwh": 6700, "annual_rent_cap": "3816944.41"},
+    {"name": "D", "income_cap": "30628651.43", "surface_cap_m2": 85, "annual_energy_cap_kwh": 10000, "annual_rent_cap": "3816944.41"},
+    {"name": "E", "income_cap": "36028231.33", "surface_cap_m2": 110, "annual_energy_cap_kwh": 13000, "annual_rent_cap": "4841002.66"},
+    {"name": "F", "income_cap": "45151659.41", "surface_cap_m2": 150, "annual_energy_cap_kwh": 16500, "annual_rent_cap": "4841002.66"},
+    {"name": "G", "income_cap": "53995798.87", "surface_cap_m2": 200, "annual_energy_cap_kwh": 20000, "annual_rent_cap": "5771964.69"},
+    {"name": "H", "income_cap": "81924660.37", "surface_cap_m2": 200, "annual_energy_cap_kwh": 20000, "annual_rent_cap": "8378658.45"},
+    {"name": "I", "income_cap": "91699761.90", "surface_cap_m2": 200, "annual_energy_cap_kwh": 20000, "annual_rent_cap": "8378658.45"},
+    {"name": "J", "income_cap": "105012519.20", "surface_cap_m2": 200, "annual_energy_cap_kwh": 20000, "annual_rent_cap": "8378658.45"},
+    {"name": "K", "income_cap": "126610838.75", "surface_cap_m2": 200, "annual_energy_cap_kwh": 20000, "annual_rent_cap": "8378658.45"}
+  ]
+}

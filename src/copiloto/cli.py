@@ -11,7 +11,6 @@ asks for a verdict, and resumes the run with the answer.
 import argparse
 import os
 import sys
-from collections.abc import Callable
 from datetime import date
 from decimal import Decimal, InvalidOperation
 from pathlib import Path
@@ -22,19 +21,10 @@ from pydantic import ValidationError
 from copiloto.analysis import RiskPolicy
 from copiloto.cuit import is_valid_cuit
 from copiloto.evals.schema import EvalCase
-from copiloto.extractors.api import ApiExtractor
-from copiloto.extractors.cli import CliExtractor, run_subprocess
-from copiloto.extractors.fake import FakeExtractor
-from copiloto.extractors.protocol import ExtractionError, InvoiceExtractor
-from copiloto.extractors.resolve import resolve_cli_argv
+from copiloto.extractors.protocol import ExtractionError
+from copiloto.extractors.select import build_extractor_factory
 from copiloto.graph.checkpoints import open_checkpointer
-from copiloto.models import (
-    DeclaredParameters,
-    ExtractedInvoice,
-    HumanDecision,
-    TaxpayerProfile,
-    Verdict,
-)
+from copiloto.models import DeclaredParameters, HumanDecision, TaxpayerProfile, Verdict
 from copiloto.registry import MockArcaRegistry
 from copiloto.scales import Scales, load_scales
 from copiloto.service import CaseAlreadyExists, Copilot, PendingReview
@@ -70,39 +60,6 @@ _PARAMETER_FLAGS = {
 }
 
 _VERDICTS: dict[str, Verdict] = {"confirmado": "confirmed", "descartado": "dismissed"}
-
-
-def _fake_for(case: EvalCase | None) -> FakeExtractor:
-    if case is None:
-        # Guarded by the argument checks; kept so the failure is explicit
-        # rather than an AttributeError deep inside a node.
-        raise ExtractionError(
-            "El extractor `fake` solo funciona con --case: no puede leer facturas reales."
-        )
-    return FakeExtractor(
-        dict(
-            zip(
-                case.invoice_texts,
-                [ExtractedInvoice.model_validate(i) for i in case.invoices],
-                strict=True,
-            )
-        )
-    )
-
-
-def build_extractor_factory(mode: str) -> Callable[[EvalCase | None], InvoiceExtractor]:
-    """Build the extractor factory for the requested mode.
-
-    The `cli` and `api` extractors ignore the case entirely: they read whatever
-    text they are handed, which is what lets the same graph run on eval cases
-    and on a folder of real invoices.
-    """
-    if mode == "fake":
-        return _fake_for
-    if mode == "cli":
-        argv = resolve_cli_argv(env=dict(os.environ))
-        return lambda _case: CliExtractor(run=run_subprocess, argv=argv)
-    return lambda _case: ApiExtractor.from_env(env=dict(os.environ))
 
 
 def _registry(case: EvalCase) -> MockArcaRegistry:
@@ -357,6 +314,22 @@ def _review(args: argparse.Namespace) -> int:
 
 
 _STATUS_LABELS = {"pending": "pendiente", "done": "cerrado", "incomplete": "incompleto"}
+DEFAULT_STATE_DB = "copiloto-state.sqlite"
+
+
+def _serve(args: argparse.Namespace) -> int:
+    """Run the web interface. Imported here so the CLI stays fast without it."""
+    import uvicorn  # noqa: PLC0415
+
+    from copiloto.web.app import WebSettings, create_app  # noqa: PLC0415
+
+    settings = WebSettings(state_db=Path(args.state_db), extractor_mode=args.extractor)
+    print(f"Copiloto de monotributo en http://{args.host}:{args.port}")
+    print(f"Casos guardados en {args.state_db}. Lector de facturas: {args.extractor}.")
+    if args.extractor == "fake":
+        print("En modo fake solo corren los ejemplos; para facturas reales usá --extractor cli o api.")
+    uvicorn.run(create_app(settings), host=args.host, port=args.port, log_level="warning")
+    return 0
 
 
 def _cases(args: argparse.Namespace) -> int:
@@ -440,12 +413,29 @@ def main(argv: list[str] | None = None) -> int:
     cases = sub.add_parser("cases", help="Listar los casos guardados y su estado.")
     cases.add_argument("--state-db", required=True, help="Archivo SQLite con los casos.")
 
+    serve = sub.add_parser("serve", help="Levantar la interfaz web.")
+    serve.add_argument("--host", default=os.environ.get("COPILOTO_HOST", "127.0.0.1"))
+    serve.add_argument("--port", type=int, default=int(os.environ.get("COPILOTO_PORT", "8000")))
+    serve.add_argument(
+        "--state-db",
+        default=os.environ.get("COPILOTO_STATE_DB", DEFAULT_STATE_DB),
+        help=f"Archivo SQLite con los casos. Por defecto {DEFAULT_STATE_DB} en la carpeta actual.",
+    )
+    serve.add_argument(
+        "--extractor",
+        choices=("fake", "cli", "api"),
+        default=os.environ.get("COPILOTO_EXTRACTOR", "fake"),
+        help="fake: solo ejemplos. cli: tu herramienta de IA. api: con clave de proveedor.",
+    )
+
     args = parser.parse_args(argv)
 
     if args.command == "review":
         return _review(args)
     if args.command == "cases":
         return _cases(args)
+    if args.command == "serve":
+        return _serve(args)
     if args.no_wait and not args.state_db:
         print(
             "--no-wait necesita --state-db: sin un archivo, el caso pendiente se pierde "

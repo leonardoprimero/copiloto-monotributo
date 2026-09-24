@@ -1,0 +1,67 @@
+{% extends "base.html" %}
+
+{% block title %}Revisión pendiente · {{ case_id }}{% endblock %}
+
+{% block content %}
+<nav class="crumbs"><a href="/">Inicio</a> › Caso {{ case_id }}</nav>
+
+<section class="card alert-card risk-{{ alert.risk_level }}">
+  <h1>Derivamos este caso a un contador antes de cerrar el informe.</h1>
+  <p class="muted">Creado {{ created_at }}. Esta página se puede volver a abrir más tarde: el caso queda guardado hasta que alguien lo resuelva.</p>
+
+  <dl class="facts">
+    <div><dt>Nivel de riesgo</dt><dd><strong>{{ alert.risk_label }}</strong></dd></div>
+    {% if alert.registered_category or alert.computed_category %}
+    <div><dt>Categoría registrada</dt><dd>{{ alert.registered_category or 'sin dato' }}</dd></div>
+    <div><dt>Categoría estimada</dt><dd>{{ alert.computed_category or 'ninguna' }}</dd></div>
+    {% endif %}
+    {% if alert.accumulated_12m %}
+    <div><dt>Acumulado 12 meses</dt><dd>{{ alert.accumulated_12m }}</dd></div>
+    <div><dt>Proyección anual</dt><dd>{{ alert.projected_12m }}</dd></div>
+    {% endif %}
+    {% if alert.headroom_registered %}
+    <div><dt>{{ alert.headroom_registered[0] }}</dt><dd>{{ alert.headroom_registered[1] }}</dd></div>
+    {% endif %}
+    {% if alert.headroom_top %}
+    <div><dt>{{ alert.headroom_top[0] }}</dt><dd>{{ alert.headroom_top[1] }}</dd></div>
+    {% endif %}
+  </dl>
+
+  {% if alert.reasons %}
+  <h2>Motivos</h2>
+  <ul>
+    {% for reason in alert.reasons %}<li>{{ reason }}</li>{% endfor %}
+  </ul>
+  {% endif %}
+
+  {% if alert.issues %}
+  <h2>Observaciones sobre los comprobantes</h2>
+  <ul class="issues">
+    {% for issue in alert.issues %}
+    <li><span class="pill">{{ issue.severity }}</span> <code>{{ issue.code }}</code> {{ issue.message }}</li>
+    {% endfor %}
+  </ul>
+  {% endif %}
+</section>
+
+<section class="card">
+  <h2>Veredicto del contador</h2>
+  <form method="post" action="/casos/{{ case_id }}/revision" class="form">
+    <div class="choices">
+      <label class="choice">
+        <input type="radio" name="verdict" value="confirmado" checked>
+        <span><strong>Confirmado</strong><br><small>La alerta es válida y el contribuyente tiene que actuar.</small></span>
+      </label>
+      <label class="choice">
+        <input type="radio" name="verdict" value="descartado">
+        <span><strong>Descartado</strong><br><small>Revisado: no corresponde tomar acción.</small></span>
+      </label>
+    </div>
+    <label>
+      Notas para el informe (opcional)
+      <textarea name="notes" rows="3" placeholder="Por ejemplo: corresponde recategorizar en el próximo período."></textarea>
+    </label>
+    <button type="submit" class="primary">Cerrar el caso con este veredicto</button>
+  </form>
+</section>
+{% endblock %}

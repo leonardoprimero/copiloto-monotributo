@@ -59,7 +59,7 @@ _PARAMETER_LABELS: dict[ParameterName, str] = {
     "rent": "alquileres",
 }
 
-_RISK_LABELS = {
+RISK_LABELS = {
     "low": "bajo",
     "medium": "medio",
     "high": "alto",
@@ -69,7 +69,7 @@ _RISK_LABELS = {
 # Internal values never reach the reader untranslated.
 _VERDICT_LABELS = {"confirmed": "confirmado", "dismissed": "descartado"}
 
-_REASON_LABELS = {
+REASON_LABELS = {
     "NEAR_REGISTERED_CAP": "Estás cerca del tope de tu categoría registrada.",
     "CATEGORY_MISMATCH": "Tus ingresos corresponden a una categoría distinta de la registrada.",
     "PROJECTION_ABOVE_REGISTERED_CAP": (
@@ -98,7 +98,7 @@ _REASON_LABELS = {
 }
 
 
-def _money(amount: Decimal) -> str:
+def format_money(amount: Decimal) -> str:
     return f"$ {amount:,.2f}".replace(",", "@").replace(".", ",").replace("@", ".")
 
 
@@ -128,7 +128,7 @@ def _declared_section(declared: DeclaredParameters) -> list[str]:
     if declared.annual_energy_kwh is not None:
         lines.append(f"- Energía eléctrica anual: {_integer(declared.annual_energy_kwh)} kWh")
     if declared.annual_rent is not None:
-        lines.append(f"- Alquileres anuales: {_money(declared.annual_rent)}")
+        lines.append(f"- Alquileres anuales: {format_money(declared.annual_rent)}")
     return lines
 
 
@@ -149,15 +149,15 @@ def _headroom_section(analysis: Analysis, scales: Scales) -> list[str]:
     if registered is not None:
         label = f"tu categoría registrada ({analysis.registered_category})"
         if registered >= 0:
-            lines.append(f"- Hasta el tope de {label}: {_money(registered)}")
+            lines.append(f"- Hasta el tope de {label}: {format_money(registered)}")
         else:
-            lines.append(f"- Superaste el tope de {label} por {_money(-registered)}.")
+            lines.append(f"- Superaste el tope de {label} por {format_money(-registered)}.")
 
     top_label = f"el tope del régimen ({scales.top_category.name})"
     if analysis.headroom_top >= 0:
-        lines.append(f"- Hasta {top_label}: {_money(analysis.headroom_top)}")
+        lines.append(f"- Hasta {top_label}: {format_money(analysis.headroom_top)}")
     else:
-        lines.append(f"- Superaste {top_label} por {_money(-analysis.headroom_top)}.")
+        lines.append(f"- Superaste {top_label} por {format_money(-analysis.headroom_top)}.")
 
     if analysis.projected_12m <= 0:
         lines.append(
@@ -235,7 +235,7 @@ def render_report(
         )
     else:
         lines.append(f"- Facturas analizadas: {invoice_count}")
-    lines.append(f"- Acumulado de los últimos 12 meses móviles: {_money(analysis.accumulated_12m)}")
+    lines.append(f"- Acumulado de los últimos 12 meses móviles: {format_money(analysis.accumulated_12m)}")
     lines.append(_category_line(analysis))
     lines.append("")
 
@@ -245,17 +245,17 @@ def render_report(
     lines += [
         "## Proyección",
         "",
-        f"- Proyección anual al ritmo reciente: {_money(analysis.projected_12m)}",
+        f"- Proyección anual al ritmo reciente: {format_money(analysis.projected_12m)}",
         "- Es una estimación propia de esta herramienta, no una fórmula de ARCA.",
         "",
     ]
 
     lines += ["## Margen", "", *_headroom_section(analysis, scales), ""]
 
-    lines += ["## Riesgo", "", f"- Nivel: {_RISK_LABELS[analysis.risk_level]}", ""]
+    lines += ["## Riesgo", "", f"- Nivel: {RISK_LABELS[analysis.risk_level]}", ""]
     if analysis.reasons:
         lines.append("Motivos:")
-        lines += [f"- {_REASON_LABELS.get(r, r)}" for r in analysis.reasons]
+        lines += [f"- {REASON_LABELS.get(r, r)}" for r in analysis.reasons]
     else:
         lines.append("No detectamos motivos de alerta en lo que revisamos.")
     lines.append("")

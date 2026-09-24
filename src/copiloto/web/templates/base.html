@@ -1,0 +1,23 @@
+<!DOCTYPE html>
+<html lang="es-AR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}Copiloto de monotributo{% endblock %}</title>
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+  <header class="topbar">
+    <a class="brand" href="/">Copiloto de monotributo</a>
+    <span class="tagline">La IA lee, el código decide, una persona revisa.</span>
+  </header>
+
+  <main class="page">
+    {% block content %}{% endblock %}
+  </main>
+
+  <footer class="disclaimer">
+    <p>{{ disclaimer }}</p>
+  </footer>
+</body>
+</html>

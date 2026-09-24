@@ -1,0 +1,122 @@
+{% extends "base.html" %}
+
+{% block content %}
+<section class="hero">
+  <h1>¿En qué categoría te ubican tus ingresos, y qué tan cerca estás del tope?</h1>
+  <p>
+    Subí tus facturas, decinos en qué categoría estás registrado, y el copiloto
+    calcula tu acumulado de doce meses, la categoría que te corresponde, el
+    margen que te queda y el riesgo de quedar excluido. Si algo no cierra, frena
+    y lo deriva a un contador antes de cerrar el informe.
+  </p>
+</section>
+
+{% if error %}
+<div class="notice error" role="alert">{{ error }}</div>
+{% endif %}
+
+<div class="columns">
+  <section class="card">
+    <h2>Con tus propias facturas</h2>
+
+    {% if offline %}
+    <div class="notice">
+      El servidor está en modo <code>fake</code>, que solo conoce los ejemplos.
+      Para leer facturas reales arrancalo con <code>COPILOTO_EXTRACTOR=cli</code>
+      (tu herramienta de IA, sin clave) o <code>COPILOTO_EXTRACTOR=api</code>.
+    </div>
+    {% else %}
+    <p class="muted">Lector de facturas: <code>{{ extractor_mode }}</code>.</p>
+    {% endif %}
+
+    <form method="post" action="/casos" enctype="multipart/form-data" class="form">
+      <label>
+        CUIT
+        <input name="cuit" type="text" inputmode="numeric" placeholder="20-11111111-2"
+               value="{{ form.cuit or '' }}" required>
+      </label>
+
+      <label>
+        Categoría en la que estás registrado
+        <select name="category" required>
+          <option value="" {% if not form.category %}selected{% endif %}>Elegí una</option>
+          {% for name in categories %}
+          <option value="{{ name }}" {% if form.category == name %}selected{% endif %}>{{ name }}</option>
+          {% endfor %}
+        </select>
+        <small>Está en tu credencial y en el pago mensual. No hace falta ninguna clave de ARCA.</small>
+      </label>
+
+      <label>
+        Facturas (.txt o .pdf con texto)
+        <input name="invoices" type="file" multiple accept=".txt,.text,.pdf">
+        <small>Un PDF escaneado sin texto se rechaza: nunca se saltea una factura en silencio.</small>
+      </label>
+
+      <fieldset>
+        <legend>Parámetros físicos (opcionales, solo si tenés local)</legend>
+        <div class="row">
+          <label>
+            Superficie afectada (m²)
+            <input name="surface_m2" type="number" min="0" step="1" value="{{ form.surface_m2 or '' }}">
+          </label>
+          <label>
+            Energía anual (kWh)
+            <input name="energy_kwh" type="number" min="0" step="1" value="{{ form.energy_kwh or '' }}">
+          </label>
+          <label>
+            Alquileres anuales ($)
+            <input name="annual_rent" type="text" inputmode="decimal" value="{{ form.annual_rent or '' }}">
+          </label>
+        </div>
+        <small>Lo que declares se evalúa contra la tabla de ARCA; lo que no, queda listado como no evaluado.</small>
+      </fieldset>
+
+      <button type="submit" class="primary">Analizar</button>
+    </form>
+  </section>
+
+  <section class="card">
+    <h2>Probar con un ejemplo</h2>
+    <p class="muted">
+      Catorce casos sintéticos con la respuesta calculada a mano. Corren sin
+      red y sin modelo.
+    </p>
+    <ul class="examples">
+      {% for example in examples %}
+      <li>
+        <form method="post" action="/casos/ejemplo/{{ example.id }}">
+          <button type="submit" class="link">{{ example.id }}</button>
+          <span class="muted">{{ example.description }}</span>
+        </form>
+      </li>
+      {% endfor %}
+    </ul>
+  </section>
+</div>
+
+<section class="card">
+  <h2>Casos</h2>
+  {% if cases %}
+  <table class="cases">
+    <thead>
+      <tr><th>Caso</th><th>Estado</th><th>CUIT</th><th>Cat.</th><th>Riesgo</th><th>Creado</th></tr>
+    </thead>
+    <tbody>
+      {% for case in cases %}
+      <tr>
+        <td><a href="/casos/{{ case.case_id }}">{{ case.case_id }}</a></td>
+        <td><span class="pill {% if case.pending %}pending{% endif %}">{{ case.status }}</span></td>
+        <td>{{ case.taxpayer_cuit }}</td>
+        <td>{{ case.registered_category }}</td>
+        <td>{{ case.risk }}</td>
+        <td class="muted">{{ case.created_at }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <p class="muted">Todavía no hay casos. Los que arranques quedan acá, pendientes o cerrados.</p>
+  {% endif %}
+</section>
+{% endblock %}

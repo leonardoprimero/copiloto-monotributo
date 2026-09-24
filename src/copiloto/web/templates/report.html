@@ -1,0 +1,14 @@
+{% extends "base.html" %}
+
+{% block title %}Informe · {{ case_id }}{% endblock %}
+
+{% block content %}
+<nav class="crumbs"><a href="/">Inicio</a> › Caso {{ case_id }}</nav>
+
+<section class="card report">
+  {% if decision and decision.reviewer == "accountant" %}
+  <div class="notice ok">Revisado por un contador. Resultado: {{ "confirmado" if decision.verdict == "confirmed" else "descartado" }}.</div>
+  {% endif %}
+  {{ report }}
+</section>
+{% endblock %}

@@ -1,0 +1,11 @@
+{% extends "base.html" %}
+
+{% block title %}No encontrado{% endblock %}
+
+{% block content %}
+<nav class="crumbs"><a href="/">Inicio</a></nav>
+<section class="card">
+  <h1>No encontramos {{ what }}.</h1>
+  <p><a href="/">Volver al inicio</a></p>
+</section>
+{% endblock %}

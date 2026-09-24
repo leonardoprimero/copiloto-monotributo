@@ -79,6 +79,23 @@ class TestListingCases:
         assert "No hay casos" in capsys.readouterr().out
 
 
+class TestServe:
+    def test_serve_builds_the_app_with_the_requested_settings(self, db, capsys, monkeypatch) -> None:
+        """Only the wiring is under test; the app has its own suite."""
+        started: list[tuple] = []
+        monkeypatch.setattr(
+            "uvicorn.run", lambda app, **kw: started.append((app.title, kw["host"], kw["port"]))
+        )
+
+        code = main(["serve", "--host", "127.0.0.1", "--port", "8123", "--state-db", db])
+        out = capsys.readouterr().out
+
+        assert code == 0
+        assert started == [("Copiloto de monotributo", "127.0.0.1", 8123)]
+        assert "http://127.0.0.1:8123" in out
+        assert Path(db).exists()
+
+
 class TestReviewingLater:
     def test_review_resumes_with_the_verdict_and_prints_the_report(
         self, db, capsys, monkeypatch

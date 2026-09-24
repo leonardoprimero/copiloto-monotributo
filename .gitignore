@@ -11,3 +11,6 @@ __pycache__/
 # Secrets and local state
 .env
 *.db
+
+# Case checkpoints written by `copiloto serve` and --state-db
+*.sqlite

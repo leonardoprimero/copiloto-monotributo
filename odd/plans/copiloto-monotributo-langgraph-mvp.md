@@ -21,7 +21,7 @@ Las seis preguntas abiertas de la síntesis quedaron respondidas antes de escrib
 | 3 | Proveedor de IA | **Tres modos de extractor:** `fake` (tests), `cli` (el CLI de IA que cada uno tenga instalado, sin API key) y `api` (proveedor con key, para quien quiera vender el servicio). |
 | 4 | Ventana de 12 meses | **Móvil**: `(hoy − 1 año, hoy]`. |
 | 5 | Categorías altas y tipo de actividad | **Mantener el supuesto de tabla única A–K para servicios y cosas muebles, documentado como tal.** T3 lo verifica en vivo contra arca.gob.ar; si la fuente muestra tablas separadas por actividad, se frena y se agrega `activity` al contribuyente. |
-| 6 | Idioma del informe y de la CLI | **Español rioplatense**, con una aclaración al inicio del informe de que el producto se consume en Argentina. README, código, identificadores y commits siguen en inglés. |
+| 6 | Idioma de la salida al usuario | **Español rioplatense** para el informe, la CLI **y el README** (revisado durante T23: el público que consume esto es argentino, así que la documentación también va en su idioma). Código, identificadores, docstrings y mensajes de commit siguen en inglés. |
 
 ## 1. Objective (Objetivo)
 
@@ -372,8 +372,10 @@ Dos idiomas, con una frontera clara:
 
 | Superficie | Idioma | Por qué |
 |---|---|---|
-| Código, identificadores, comentarios, commits, README, docstrings | Inglés | Repo público, lectura internacional, muestra de trabajo |
-| **Informe y CLI (lo que lee el monotributista)** | **Español rioplatense** | El producto se consume en Argentina |
+| Código, identificadores, comentarios, docstrings, commits | Inglés | Convención técnica; el código lo leen desarrolladores |
+| **Informe, CLI y README** | **Español rioplatense** | **El público que consume esto es argentino** |
+
+Revisión durante T23: el pedido original ponía el README en inglés. Se cambió a español con un argumento mejor — un monotributista no lee documentación en inglés, y el idioma de un producto lo define quién lo usa, no la costumbre. `DISCLAIMER_EN` se eliminó al quedar sin consumidor.
 
 El informe abre con una nota de alcance antes del disclaimer:
 

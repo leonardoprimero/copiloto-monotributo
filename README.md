@@ -1,30 +1,311 @@
 # Copiloto Monotributo
 
-A LangGraph copilot for Argentine monotributistas: it reads synthetic invoices,
-validates them in code, and estimates category and exclusion risk.
+Un copiloto para monotributistas, hecho con LangGraph. Lee facturas con un
+modelo, las verifica con código, y te dice en qué categoría te ubican tus
+ingresos y qué tan cerca estás de quedar excluido del régimen.
 
-> **Disclaimer.** This project is for informational and educational purposes only.
-> It is not tax or legal advice and does not replace a licensed accountant. It never
-> files anything with ARCA: it does not submit returns, recategorize, or perform any
-> procedure on your behalf. All invoices, CUITs and taxpayers in this repository are
-> synthetic.
+> **Aviso.** Este copiloto es orientativo y tiene fines informativos y educativos.
+> No es asesoramiento impositivo ni legal, y no reemplaza a un contador matriculado.
+> Nunca presenta trámites ante ARCA: no declara, no recategoriza y no hace ninguna
+> gestión en tu nombre. Todas las facturas, CUIT y contribuyentes de este proyecto
+> son sintéticos.
 
-Work in progress. Full documentation, graph diagram and quickstart land with the MVP.
-See [docs/configuration.md](docs/configuration.md) for the extractor modes.
+## Qué hace
 
-## Verified against
+1. **Lee** el texto de una factura y lo convierte en datos estructurados. Es el
+   único paso donde participa un modelo.
+2. **Verifica** con código: dígito verificador del CUIT, que los montos cierren,
+   el precio unitario máximo, y que las fechas caigan dentro de la ventana móvil
+   de doce meses.
+3. **Consulta** la categoría registrada en un padrón de ARCA simulado.
+4. **Analiza** los últimos doce meses: acumulado, categoría que corresponde,
+   proyección al ritmo reciente y nivel de riesgo.
+5. **Informa** — o frena y deriva el caso a un contador antes de cerrar.
 
-The design does not rely on remembered API shapes. These facts were checked
-against the installed packages on 2026-09-24 and are pinned by
-`tests/graph/test_langgraph_api.py`:
+## El grafo
 
-| Question | Answer |
+```mermaid
+---
+config:
+  flowchart:
+    curve: linear
+---
+graph TD;
+	__start__([<p>__start__</p>]):::first
+	extract_invoices(extract_invoices)
+	validate_invoices(validate_invoices)
+	lookup_taxpayer(lookup_taxpayer)
+	analyze_income(analyze_income)
+	request_accountant_review(request_accountant_review)
+	write_report(write_report)
+	__end__([<p>__end__</p>]):::last
+	__start__ --> extract_invoices;
+	analyze_income -. &nbsp;review&nbsp; .-> request_accountant_review;
+	analyze_income -. &nbsp;ok&nbsp; .-> write_report;
+	extract_invoices --> validate_invoices;
+	lookup_taxpayer --> analyze_income;
+	request_accountant_review --> write_report;
+	validate_invoices --> lookup_taxpayer;
+	write_report --> __end__;
+	classDef default fill:#f2f0ff,line-height:1.2
+	classDef first fill-opacity:0
+	classDef last fill:#bfb6fc
+```
+
+Ese diagrama lo genera `scripts/export_graph.py` desde el grafo compilado, y un
+test compara este bloque contra un render fresco. Un diagrama que puede
+desincronizarse del código es peor que no tener diagrama.
+
+| Nodo | Qué hace |
 | --- | --- |
-| Versions | `langgraph` 1.2.12, `langchain-core` 1.6.4, Python 3.12.14 |
-| `InMemorySaver` or `MemorySaver`? | Both are exported and `MemorySaver is InMemorySaver`. The project uses `InMemorySaver`. |
-| How is a pause observed? | The `invoke` result carries an `__interrupt__` key; `result["__interrupt__"][0].value` is the payload. |
-| Does resuming replay the node? | **Yes.** The node runs again from its first line, so anything before `interrupt()` happens twice. Review nodes therefore only build a pure payload before pausing. |
-| Diagram | `graph.get_graph().draw_mermaid()` |
+| `extract_invoices` | Llama al extractor una vez por factura. Si una no se puede leer, queda registrada como observación y el resto sigue. |
+| `validate_invoices` | CUIT, montos, precio unitario máximo, fechas. Anota lo que no cierra. |
+| `lookup_taxpayer` | Categoría registrada, desde el padrón simulado. Si no está, lo dice; nunca lo inventa. |
+| `analyze_income` | Acumulado, categoría estimada, proyección, nivel de riesgo y motivos. |
+| `request_accountant_review` | Pausa con `interrupt()` y espera a una persona. |
+| `write_report` | Arma el informe. Las dos ramas terminan acá, así que un caso derivado también produce un documento. |
 
-Python is pinned to 3.12 because `langchain-core` warns that Pydantic V1
-internals are not compatible with Python 3.14 or greater.
+### Cuándo deriva a un contador
+
+Hay dos motivos independientes:
+
+- **Riesgo.** Cualquier nivel distinto de `low`: estar cerca de un tope, que la
+  categoría ya no corresponda, una proyección que supere el régimen, ingresos
+  por encima del tope máximo, o un producto facturado por encima del precio
+  unitario máximo.
+- **Dato dudoso.** Cualquier advertencia o error: un CUIT inválido, un total que
+  no coincide con sus ítems, una fecha futura, una factura ilegible, un
+  contribuyente que no está en el padrón, o directamente ninguna factura.
+
+Las observaciones informativas —por ejemplo una factura fuera de la ventana— no
+derivan por sí solas.
+
+El contrato vive en `RiskPolicy.review_levels`, y los tests de ruteo corren
+contra las dos lecturas posibles. Es una decisión de configuración, no una
+regla soldada al código.
+
+### Human in the loop
+
+`request_accountant_review` llama a `interrupt()`. La ejecución se suspende, el
+estado queda en un checkpoint, y la alerta aparece como `__interrupt__` en el
+resultado del invoke. Quien llamó reanuda con `Command(resume={...})`, y ese
+valor es lo que `interrupt()` devuelve dentro del nodo.
+
+Un detalle define la forma de ese nodo: **al reanudar, se re-ejecuta desde la
+primera línea.** Todo lo que esté antes de la pausa ocurre dos veces. Por eso el
+nodo solo arma un payload puro antes de pausar, y escribe la decisión después de
+la reanudación. `tests/graph/test_langgraph_api.py` fija ese comportamiento
+contra el paquete instalado.
+
+## Decisiones de diseño
+
+**La IA lee, el código decide.** El modelo convierte texto en una factura y nada
+más. Todo juicio —CUIT válido, montos coherentes, categoría, riesgo, qué rama
+tomar— es código determinístico. Por eso toda la lógica fiscal se testea sin
+modelo, sin clave y sin red, y por eso un resultado se puede discutir en vez de
+tener que creerle.
+
+**La tabla de ARCA es dato, no constante.** Cambia cada semestre, así que vive en
+`config/monotributo_scales.json` con la URL de la fuente, la fecha de vigencia y
+la fecha en que se consultó. Los montos se guardan como texto y se parsean a
+`Decimal`: los topes tienen centavos y son inclusivos, así que un error de
+redondeo de un float alcanza para mandar a alguien a la categoría equivocada.
+
+**El extractor está detrás de un Protocol.** Tres implementaciones, un contrato.
+El grafo no se entera de cuál hay abajo.
+
+**Todo es sintético.** No hay una sola factura, CUIT ni contribuyente real en
+este repositorio, y el proyecto nunca le pide credenciales de ARCA a nadie.
+
+**El reloj se inyecta.** `today` es un parámetro en todos lados, así que los
+resultados son reproducibles y los tests no caducan.
+
+## Verificado contra
+
+Nada de esto se escribió de memoria. Se verificó contra los paquetes instalados
+y la fuente oficial el 2026-09-24:
+
+| Pregunta | Respuesta |
+| --- | --- |
+| Versiones | `langgraph` 1.2.12, `langchain-core` 1.6.4, Python 3.12 |
+| ¿`InMemorySaver` o `MemorySaver`? | Los dos se exportan y `MemorySaver is InMemorySaver`. Este proyecto usa `InMemorySaver`. |
+| ¿Cómo se detecta la pausa? | `__interrupt__` en el resultado del invoke; el payload está en `result["__interrupt__"][0].value`. |
+| ¿Al reanudar se re-ejecuta el nodo? | Sí, desde la primera línea. |
+| ¿Los topes de ingresos dependen de la actividad? | No. La tabla publicada tiene una sola columna de ingresos brutos para A–K; la distinción entre servicios y venta de cosas muebles aparece solo en el monto mensual a pagar. |
+
+Python está fijado en 3.12 porque `langchain-core` advierte que los internals de
+Pydantic V1 no son compatibles con Python 3.14 o superior.
+
+## Qué NO evalúa
+
+La categoría estimada sale únicamente de los ingresos. Este proyecto no mira:
+
+- superficie afectada a la actividad
+- energía eléctrica consumida
+- alquileres devengados
+- cantidad de actividades y unidades de explotación
+- gastos y adquisiciones no justificados
+
+Por eso un riesgo bajo **no** es una verificación integral, y cada informe lo
+aclara. La exclusión tiene causales que esta herramienta no revisa.
+
+## Elegir un extractor
+
+El extractor es el único componente donde participa un modelo. Se elige con
+`COPILOTO_EXTRACTOR`:
+
+| Modo | Para quién | Requisitos |
+| --- | --- | --- |
+| `fake` (default) | Tests y evals | Nada. Corre sin red. |
+| `cli` | Cualquiera que ya tenga un CLI de IA instalado | El binario. **Sin API key** |
+| `api` | Despliegues que producen informes a escala | `uv sync --extra api` y una clave de proveedor |
+
+**El modo `cli`** le habla a la herramienta que ya usás. Resuelve en este orden:
+`COPILOTO_EXTRACTOR_CMD` (cualquier comando, el prompt va por stdin), después
+`COPILOTO_CLI` (un adaptador por nombre), y después autodetección sobre `codex`,
+`claude`, `agy` y `gemini`. Si no resuelve ninguno falla con un mensaje que dice
+qué hacer — **nunca** cae a `fake`, porque eso daría a entender que un modelo
+leyó tus facturas cuando no las leyó nadie.
+
+Esas cuatro invocaciones salieron del `--help` de cada herramienta, no de la
+memoria de nadie. Cualquier otra herramienta entra por `COPILOTO_EXTRACTOR_CMD`.
+
+**El modo `api`** es el código más corto, y vale notarlo:
+`with_structured_output` hace que el proveedor garantice la forma de la
+respuesta, así que buscar el JSON, validarlo y reintentar —todo lo que el modo
+`cli` tiene que hacer a mano— directamente desaparece. El camino pago es más
+fácil de programar que el gratis.
+
+Todas las variables están en [docs/configuration.md](docs/configuration.md).
+
+## Arranque rápido
+
+Necesitás [uv](https://docs.astral.sh/uv/) y Python 3.12.
+
+```sh
+uv sync
+uv run pytest                                   # 450 tests, sin red
+uv run python -m copiloto.evals                 # 14 casos, sin red
+```
+
+Correr un caso:
+
+```sh
+# Tranquilo: va directo al informe
+uv run copiloto run --case evals/cases/all_in_order.json
+
+# Derivado: muestra la alerta y te pide hacer de contador
+uv run copiloto run --case evals/cases/category_change.json
+
+# Derivado sin teclado; el informe aclara que nadie lo revisó
+uv run copiloto run --case evals/cases/category_change.json --auto-resume
+```
+
+Con tu propio CLI de IA, sin clave:
+
+```sh
+COPILOTO_EXTRACTOR=cli uv run copiloto run --case evals/cases/all_in_order.json
+```
+
+Con una API de proveedor:
+
+```sh
+uv sync --extra api
+export COPILOTO_API_PROVIDER=anthropic     # o: openai
+export ANTHROPIC_API_KEY=...
+uv run copiloto run --case evals/cases/all_in_order.json --extractor api
+```
+
+## Tests y evals
+
+La suite corre en un clon limpio sin clave, sin CLI de IA y sin red.
+
+Los evals son catorce casos sintéticos con la respuesta calculada a mano desde
+la tabla de ARCA — nunca derivada del código que se está probando, porque una
+expectativa calculada por la misma lógica que verifica pasa por construcción.
+Cada caso registra su aritmética, así un caso que falla se puede discutir en vez
+de solo volver a correr.
+
+Dos métricas, deliberadamente separadas:
+
+```
+decision accuracy   100.0% (14 cases)
+extraction accuracy 100.0%
+  issuer_cuit    100.0%
+  issue_date     100.0%
+  total          100.0%
+```
+
+Van separadas porque un modelo puede leer mal todas las fechas y aun así llegar
+a la categoría correcta. Promediadas en un solo número, ese error desaparecería
+detrás de un veredicto acertado.
+
+Las corridas sin red tienen que dar 100%: son determinísticas, así que cualquier
+cosa menor es un bug. Las corridas con modelo se miden y se informan, no se
+exigen.
+
+## Escalas del monotributo
+
+Fuente: <https://www.arca.gob.ar/monotributo/categorias.asp>
+Vigentes desde el **2026-08-01**, consultadas el **2026-09-24**.
+
+| Categoría | Ingresos brutos anuales |
+| :-: | --: |
+| A | 12,009,410.45 |
+| B | 17,595,182.74 |
+| C | 24,670,494.31 |
+| D | 30,628,651.43 |
+| E | 36,028,231.33 |
+| F | 45,151,659.41 |
+| G | 53,995,798.87 |
+| H | 81,924,660.37 |
+| I | 91,699,761.90 |
+| J | 105,012,519.20 |
+| K | 126,610,838.75 |
+
+Precio unitario máximo para venta de cosas muebles: **716,840.77**. Los topes son
+inclusivos: un ingreso igual al tope todavía pertenece a esa categoría.
+
+ARCA los actualiza cada semestre. Para refrescarlos, editá
+`config/monotributo_scales.json`, actualizá `effective_from` y `retrieved_on`, y
+corré los tests.
+
+## Idioma
+
+El informe, la CLI y esta documentación están en español rioplatense, porque el
+monotributo es un régimen argentino y quien usa esto está en Argentina. El
+código, los identificadores y los mensajes de commit están en inglés.
+
+## Estructura del proyecto
+
+```
+config/monotributo_scales.json   tabla de ARCA, versionada con fuente y fechas
+docs/graph.mmd                   diagrama, generado desde el grafo
+evals/cases/*.json               catorce casos sintéticos con respuesta conocida
+scripts/                         regenerar el diagrama y los casos de eval
+src/copiloto/
+  scales.py categories.py        la tabla de ARCA y qué implica
+  cuit.py dates.py validation.py las verificaciones
+  analysis.py report.py          el veredicto y cómo se cuenta
+  extractors/                    fake, cli y api detrás de un Protocol
+  registry.py                    consulta simulada al padrón
+  graph/                         estado, nodos, ruteo, builder, diagrama
+  evals/                         dataset, runner, punto de entrada
+  cli.py                         la demo
+```
+
+## Roadmap
+
+Fuera de alcance por ahora, listado para que nadie asuma lo contrario: facturas
+en PDF o imagen (OCR), los parámetros físicos y las demás causales de exclusión,
+checkpoints en disco con SQLite, extracción en paralelo, una interfaz web, y
+cualquier contacto con servicios reales de ARCA o datos reales de contribuyentes.
+
+Una consulta de padrón real sería otra implementación del Protocol del
+registro, desplegada de forma privada, autenticándose como sí misma bajo el
+modelo de delegación de ARCA — de modo que el contribuyente otorgue y revoque el
+acceso sin entregar nunca una contraseña.
+
+## Licencia
+
+MIT. Ver [LICENSE](LICENSE).

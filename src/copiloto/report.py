@@ -1,9 +1,13 @@
 """Rendering the report.
 
-Written in Spanish because monotributo is an Argentine regime and this is what
-the taxpayer reads; the code, the identifiers and the README stay in English.
+Written in Spanish because monotributo is an Argentine regime and the people
+who read this are in Argentina; the code and the identifiers stay in English.
 The register is professional: a report that warns someone about losing their
 tax regime should not sound casual.
+
+`DISCLAIMER_ES` is the single source of truth for that warning. The README
+quotes it verbatim and a test compares them, so it cannot be trimmed in one
+place and survive in the other.
 
 A pure function from data to text. It reads no clock and no file, so it renders
 the same bytes for the same input, and it is tested without the graph.
@@ -21,19 +25,13 @@ SCOPE_NOTE_ES = (
 )
 
 DISCLAIMER_ES = (
-    "**Aviso.** Este informe es orientativo y tiene fines informativos y educativos. "
+    # Phrased to read correctly both above a report and at the top of the
+    # README, because it is quoted verbatim in both and a test compares them.
+    "**Aviso.** Este copiloto es orientativo y tiene fines informativos y educativos. "
     "No es asesoramiento impositivo ni legal, y no reemplaza a un contador matriculado. "
     "Nunca presenta trámites ante ARCA: no declara, no recategoriza y no hace ninguna "
     "gestión en tu nombre. Todas las facturas, CUIT y contribuyentes de este proyecto "
     "son sintéticos."
-)
-
-DISCLAIMER_EN = (
-    "**Disclaimer.** This project is for informational and educational purposes only. "
-    "It is not tax or legal advice and does not replace a licensed accountant. It never "
-    "files anything with ARCA: it does not submit returns, recategorize, or perform any "
-    "procedure on your behalf. All invoices, CUITs and taxpayers in this repository are "
-    "synthetic."
 )
 
 # What this MVP never looks at. Listed in every report so that a low risk level

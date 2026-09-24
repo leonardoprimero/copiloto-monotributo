@@ -12,7 +12,6 @@ from decimal import Decimal
 from copiloto.analysis import Analysis
 from copiloto.models import HumanDecision, Issue, TaxpayerProfile
 from copiloto.report import (
-    DISCLAIMER_EN,
     DISCLAIMER_ES,
     NOT_EVALUATED,
     SCOPE_NOTE_ES,
@@ -63,13 +62,6 @@ class TestDisclaimers:
         assert "orientativo" in text
         assert "no reemplaza a un contador" in text
         assert "nunca presenta trámites" in text
-
-    def test_the_english_disclaimer_keeps_the_same_three_clauses(self) -> None:
-        text = DISCLAIMER_EN.lower()
-
-        assert "informational" in text
-        assert "does not replace a licensed accountant" in text
-        assert "never files anything with arca" in text
 
     def test_the_report_never_claims_to_file_or_recategorize(self) -> None:
         body = report(analysis=RISKY).lower()

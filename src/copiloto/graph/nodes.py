@@ -130,6 +130,44 @@ def make_analyze_node(*, scales: Scales, today: date, policy: RiskPolicy):
     return analyze_income
 
 
+def build_review_alert(state: CopilotState) -> dict:
+    """Summarize why a case needs a person.
+
+    Deliberately pure. The review node calls this *before* pausing, and a
+    resumed node re-runs from its first line, so everything that happens before
+    the pause must be safe to run twice.
+    """
+    analysis = state.get("analysis")
+    issues = state.get("issues", [])
+    return {
+        "risk_level": analysis.risk_level if analysis else "unknown",
+        "reasons": list(analysis.reasons) if analysis else [],
+        "accumulated_12m": str(analysis.accumulated_12m) if analysis else None,
+        "projected_12m": str(analysis.projected_12m) if analysis else None,
+        "computed_category": analysis.computed_category if analysis else None,
+        "registered_category": analysis.registered_category if analysis else None,
+        "issues": [
+            {"code": i.code, "severity": i.severity, "message": i.message}
+            for i in issues
+            if i.severity in ("warning", "error")
+        ],
+    }
+
+
+def make_review_node():
+    """Build the human-in-the-loop node.
+
+    Replaced in the next step by the real `interrupt()` pause; for now it lets
+    the graph be wired and the routing tested end to end.
+    """
+
+    def request_accountant_review(state: CopilotState) -> dict:
+        build_review_alert(state)
+        return {}
+
+    return request_accountant_review
+
+
 def make_report_node(*, scales: Scales):
     """Build the node that renders the analysis for the taxpayer.
 

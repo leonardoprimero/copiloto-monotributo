@@ -84,9 +84,31 @@ class TestExtractorModes:
         assert "Sin API key" in README
 
 
+class TestWebAndHandoff:
+    def test_the_web_command_is_in_the_quickstart(self) -> None:
+        assert "uv run copiloto serve" in README
+
+    def test_the_handoff_commands_are_documented(self) -> None:
+        for command in ("--no-wait", "copiloto cases", "copiloto review"):
+            assert command in README
+
+    def test_the_state_variable_is_named(self) -> None:
+        assert "COPILOTO_STATE_DB" in README
+
+    def test_the_declared_parameters_are_documented_with_their_flags(self) -> None:
+        for flag in ("--surface-m2", "--energy-kwh", "--annual-rent"):
+            assert flag in README
+
+
 class TestScales:
     def test_the_effective_date_matches_the_config(self) -> None:
         assert SCALES.effective_from.isoformat() in README
+
+    def test_the_physical_caps_match_the_config(self) -> None:
+        """The physical table is data too, and it rots the same way."""
+        for category in SCALES.categories:
+            assert f"{category.annual_rent_cap:,.2f}" in README
+            assert f"{category.annual_energy_cap_kwh:,}" in README
 
     def test_the_source_is_cited(self) -> None:
         assert SCALES.source in README

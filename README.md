@@ -4,7 +4,16 @@
 
 Un copiloto para monotributistas, hecho con LangGraph. Lee facturas con un
 modelo, las verifica con código, y te dice en qué categoría te ubican tus
-ingresos y qué tan cerca estás de quedar excluido del régimen.
+ingresos, cuánto margen te queda y qué tan cerca estás de quedar excluido del
+régimen. Si algo no cierra, frena y le deja el caso a un contador, que puede
+resolverlo más tarde desde otra máquina.
+
+Se usa desde el navegador o desde la terminal:
+
+```sh
+uv sync
+uv run copiloto serve        # http://127.0.0.1:8000
+```
 
 > **Aviso.** Este copiloto es orientativo y tiene fines informativos y educativos.
 > No es asesoramiento impositivo ni legal, y no reemplaza a un contador matriculado.
@@ -21,8 +30,12 @@ ingresos y qué tan cerca estás de quedar excluido del régimen.
    de doce meses.
 3. **Consulta** la categoría registrada en un padrón de ARCA simulado.
 4. **Analiza** los últimos doce meses: acumulado, categoría que corresponde,
-   proyección al ritmo reciente y nivel de riesgo.
-5. **Informa** — o frena y deriva el caso a un contador antes de cerrar.
+   proyección al ritmo reciente, margen hasta cada tope y nivel de riesgo. Si
+   declarás superficie, energía o alquileres, los evalúa contra la misma tabla:
+   la categoría es la del parámetro más alto, como establece ARCA.
+5. **Informa** — o frena y deriva el caso a un contador antes de cerrar. El
+   caso queda guardado; el contador lo abre cuando puede, le pone el veredicto
+   y recién ahí se escribe el informe.
 
 ## El grafo
 
@@ -73,8 +86,9 @@ Hay dos motivos independientes:
 
 - **Riesgo.** Cualquier nivel distinto de `low`: estar cerca de un tope, que la
   categoría ya no corresponda, una proyección que supere el régimen, ingresos
-  por encima del tope máximo, o un producto facturado por encima del precio
-  unitario máximo.
+  por encima del tope máximo, un producto facturado por encima del precio
+  unitario máximo, o un parámetro físico declarado que supere lo que admite la
+  categoría registrada (medio) o el máximo del régimen (exclusión).
 - **Dato dudoso.** Cualquier advertencia o error: un CUIT inválido, un total que
   no coincide con sus ítems, una fecha futura, una factura ilegible, un
   contribuyente que no está en el padrón, o directamente ninguna factura.
@@ -99,6 +113,21 @@ nodo solo arma un payload puro antes de pausar, y escribe la decisión después 
 la reanudación. `tests/graph/test_langgraph_api.py` fija ese comportamiento
 contra el paquete instalado.
 
+### El caso sobrevive al proceso
+
+La pausa se escribe en un checkpoint. Con el checkpointer en memoria, el caso
+vive lo que vive el proceso: suficiente para una demo que pregunta y reanuda en
+la misma corrida. Con `--state-db` (o siempre, en la web) el checkpoint va a
+SQLite, y reanudar es otra invocación del grafo sobre el mismo `thread_id`,
+desde otro proceso, horas después.
+
+`copiloto.service.Copilot` envuelve eso en cuatro operaciones —arrancar,
+consultar, reanudar, listar— y la CLI y la web las usan por igual. El grafo
+que reanuda no vuelve a pasar por `lookup_taxpayer` ni por `extract_invoices`:
+sus resultados ya están en el checkpoint. Por eso ese grafo se arma con un
+registro y un extractor que **fallan en voz alta** si alguien los consulta, en
+vez de inventar una categoría que quien reanuda quizás no tiene a mano.
+
 ## Decisiones de diseño
 
 **La IA lee, el código decide.** El modelo convierte texto en una factura y nada
@@ -115,6 +144,16 @@ redondeo de un float alcanza para mandar a alguien a la categoría equivocada.
 
 **El extractor está detrás de un Protocol.** Tres implementaciones, un contrato.
 El grafo no se entera de cuál hay abajo.
+
+**Lo declarado se muestra como declarado.** Superficie, energía y alquileres
+solo pueden venir del contribuyente. El informe los lista bajo “Parámetros
+declarados” y aclara que nadie los verificó; lo que no se declara queda en “No
+evaluado”, nunca se asume cero.
+
+**El margen es la pregunta real.** Saber que estás en A no te dice qué hacer.
+El informe dice cuánto podés facturar antes del tope de tu categoría y del
+régimen, y cuántos meses te quedan al ritmo reciente. Esa cuenta de meses es
+una heurística propia y el informe la declara como tal.
 
 **Todo es sintético.** No hay una sola factura, CUIT ni contribuyente real en
 este repositorio, y el proyecto nunca le pide credenciales de ARCA a nadie.
@@ -134,19 +173,22 @@ y la fuente oficial el 2026-09-24:
 | ¿Cómo se detecta la pausa? | `__interrupt__` en el resultado del invoke; el payload está en `result["__interrupt__"][0].value`. |
 | ¿Al reanudar se re-ejecuta el nodo? | Sí, desde la primera línea. |
 | ¿Los topes de ingresos dependen de la actividad? | No. La tabla publicada tiene una sola columna de ingresos brutos para A–K; la distinción entre servicios y venta de cosas muebles aparece solo en el monto mensual a pagar. |
+| ¿`SqliteSaver` acepta el serializador propio? | Sí, por constructor: `SqliteSaver(conn, serde=...)`. `from_conn_string` no lo acepta, por eso la conexión se abre a mano. |
+| ¿Un grafo nuevo sobre el mismo archivo reanuda la pausa de otro? | Sí. `tests/graph/test_checkpoints.py` arma dos grafos independientes sobre el mismo SQLite y el segundo cierra el caso del primero, con los tipos intactos. |
 
 Python está fijado en 3.12 porque `langchain-core` advierte que los internals de
 Pydantic V1 no son compatibles con Python 3.14 o superior.
 
 ## Qué NO evalúa
 
-La categoría estimada sale únicamente de los ingresos. Este proyecto no mira:
+Sin declaraciones, la categoría estimada sale únicamente de los ingresos.
+Superficie, energía y alquileres se evalúan **solo si los declarás**; si no,
+quedan en la lista de no evaluado. Y hay causales que este proyecto no mira
+nunca:
 
-- superficie afectada a la actividad
-- energía eléctrica consumida
-- alquileres devengados
 - cantidad de actividades y unidades de explotación
 - gastos y adquisiciones no justificados
+- las excepciones por tamaño de la localidad donde está el local
 
 Por eso un riesgo bajo **no** es una verificación integral, y cada informe lo
 aclara. La exclusión tiene causales que esta herramienta no revisa.
@@ -186,9 +228,31 @@ Necesitás [uv](https://docs.astral.sh/uv/) y Python 3.12.
 
 ```sh
 uv sync
-uv run pytest                                   # 450 tests, sin red
+uv run pytest                                   # 632 tests, sin red
 uv run python -m copiloto.evals                 # 14 casos, sin red
 ```
+
+### Desde el navegador
+
+```sh
+uv run copiloto serve
+```
+
+Abre `http://127.0.0.1:8000`. La página de inicio tiene el formulario para tus
+facturas, los catorce ejemplos para probar sin modelo, y la lista de casos con
+su estado. Un caso derivado es una URL: el contador la abre cuando puede, ve la
+alerta con el margen y los motivos, elige confirmado o descartado, y recién
+entonces se escribe el informe. Los casos quedan en `copiloto-state.sqlite` en
+la carpeta actual (`--state-db` o `COPILOTO_STATE_DB` para cambiarlo).
+
+Para leer facturas reales desde la web, el servidor tiene que arrancar con un
+lector:
+
+```sh
+COPILOTO_EXTRACTOR=cli uv run copiloto serve
+```
+
+### Desde la terminal
 
 Correr un caso:
 
@@ -216,6 +280,13 @@ uv run copiloto run \
   --extractor cli
 ```
 
+Si tenés local, declará los parámetros físicos y se evalúan contra la tabla:
+
+```sh
+uv run copiloto run --invoices-dir ~/mis-facturas --cuit 20-11111111-2 --category A \
+  --extractor cli --surface-m2 40 --energy-kwh 5000 --annual-rent 3000000
+```
+
 **No hace falta ninguna credencial de ARCA.** Lo único que una consulta al
 padrón aportaría es la categoría en la que estás registrado, y esa letra ya la
 sabés: está en tu credencial y en el pago mensual. Preferímos preguntártela
@@ -224,6 +295,25 @@ antes que sostener la clave fiscal de nadie.
 Los PDF de ARCA suelen traer el texto embebido, así que se leen directo. Si un
 PDF es una imagen escaneada, el programa te lo dice y frena: **nunca saltea una
 factura en silencio**, porque eso bajaría tu acumulado sin que te enteres.
+
+### Dejarle el caso a un contador
+
+Con un archivo de estado, un caso derivado no necesita que alguien conteste en
+el momento:
+
+```sh
+# Deja el caso guardado y sale con código 3
+uv run copiloto run --case evals/cases/category_change.json \
+  --state-db casos.sqlite --no-wait
+
+# Más tarde, en otra terminal o en otra máquina con el mismo archivo
+uv run copiloto cases --state-db casos.sqlite
+uv run copiloto review --state-db casos.sqlite --case-id <id> \
+  --verdict confirmado --notes "Corresponde recategorizar."
+```
+
+`review` vuelve a mostrar la alerta antes de preguntar: horas después, el
+contador necesita el contexto, no solo un prompt.
 
 Con `--extractor cli` usás la herramienta de IA que ya tengas, sin clave:
 
@@ -290,6 +380,22 @@ Vigentes desde el **2026-08-01**, consultadas el **2026-09-24**.
 Precio unitario máximo para venta de cosas muebles: **716,840.77**. Los topes son
 inclusivos: un ingreso igual al tope todavía pertenece a esa categoría.
 
+Los parámetros físicos, de la misma tabla, se usan solo cuando los declarás:
+
+| Categoría | Superficie (m²) | Energía anual (kWh) | Alquileres anuales |
+| :-: | --: | --: | --: |
+| A | 30 | 3,330 | 2,792,886.15 |
+| B | 45 | 5,000 | 2,792,886.15 |
+| C | 60 | 6,700 | 3,816,944.41 |
+| D | 85 | 10,000 | 3,816,944.41 |
+| E | 110 | 13,000 | 4,841,002.66 |
+| F | 150 | 16,500 | 4,841,002.66 |
+| G | 200 | 20,000 | 5,771,964.69 |
+| H–K | 200 | 20,000 | 8,378,658.45 |
+
+La categoría es la del parámetro más alto. Superar el máximo de K en cualquiera
+de ellos es causal de exclusión, sin importar los ingresos.
+
 ARCA los actualiza cada semestre. Para refrescarlos, editá
 `config/monotributo_scales.json`, actualizá `effective_from` y `retrieved_on`, y
 corré los tests.
@@ -308,21 +414,23 @@ docs/graph.mmd                   diagrama, generado desde el grafo
 evals/cases/*.json               catorce casos sintéticos con respuesta conocida
 scripts/                         regenerar el diagrama y los casos de eval
 src/copiloto/
-  scales.py categories.py        la tabla de ARCA y qué implica
+  scales.py categories.py        la tabla de ARCA y qué implica, por cada parámetro
   cuit.py dates.py validation.py las verificaciones
-  analysis.py report.py          el veredicto y cómo se cuenta
+  analysis.py report.py          el veredicto, el margen y cómo se cuenta
   extractors/                    fake, cli y api detrás de un Protocol
   registry.py                    consulta simulada al padrón
-  graph/                         estado, nodos, ruteo, builder, diagrama
+  graph/                         estado, nodos, ruteo, builder, checkpoints, diagrama
+  service.py                     arrancar, consultar, reanudar y listar casos
+  web/                           la interfaz: FastAPI, plantillas, estilo
   evals/                         dataset, runner, punto de entrada
-  cli.py                         la demo
+  cli.py                         run, review, cases, serve
 ```
 
 ## Roadmap
 
 Fuera de alcance por ahora, listado para que nadie asuma lo contrario: facturas
-en PDF o imagen (OCR), los parámetros físicos y las demás causales de exclusión,
-checkpoints en disco con SQLite, extracción en paralelo, una interfaz web, y
+escaneadas (OCR), las causales de exclusión que no dependen de un parámetro
+declarable, extracción en paralelo, usuarios y autenticación en la web, y
 cualquier contacto con servicios reales de ARCA o datos reales de contribuyentes.
 
 Una consulta de padrón real sería otra implementación del Protocol del

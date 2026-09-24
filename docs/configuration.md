@@ -61,3 +61,21 @@ Keys are read from the environment. This repository does not ship a `.env`
 template on purpose, so that no one fills one in with a real key and commits it
 by accident. `.env` is listed in `.gitignore`; export the variables in your shell
 or use your own secret manager.
+
+## Case state
+
+| Variable | Default | Used by |
+| --- | --- | --- |
+| `COPILOTO_STATE_DB` | `copiloto-state.sqlite` for `serve`; in memory for `run` | `run --state-db`, `review`, `cases`, `serve` |
+| `COPILOTO_HOST` | `127.0.0.1` | `serve` |
+| `COPILOTO_PORT` | `8000` | `serve` |
+
+The state file holds every case's checkpoints: inputs, extracted invoices,
+analysis, the pause waiting for an accountant, and the report. Two processes
+pointing at the same file see the same cases, which is how a case started on
+the CLI or the web is resumed later by someone else. Delete the file to forget
+every case. It is ignored by git.
+
+The web server binds to localhost on purpose. It has no users, no
+authentication and no rate limiting: anyone who can reach it can open every
+case. Put it behind something that does those jobs before exposing it.

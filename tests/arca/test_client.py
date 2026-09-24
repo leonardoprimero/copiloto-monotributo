@@ -135,6 +135,22 @@ class TestTheTicketOutlivesTheProcess:
 
         assert len(arca.to("/LoginCms")) == 2
 
+    def test_a_cache_that_cannot_be_written_does_not_lose_the_ticket(
+        self, credentials: tuple[Path, Path], tmp_path: Path
+    ) -> None:
+        """WSAA has already issued it. Losing it now means twelve hours locked out."""
+        arca = RecordedArca()
+        not_a_directory = tmp_path / "un-archivo"
+        not_a_directory.write_text("")
+        registry = a_registry(credentials, arca, ticket_cache=not_a_directory / "ticket.json")
+
+        with pytest.warns(RuntimeWarning, match="ticket"):
+            profile = registry.lookup("27-01594221-0")
+        registry.lookup("27-01594221-0")
+
+        assert profile is not None
+        assert len(arca.to("/LoginCms")) == 1
+
     def test_without_a_cache_nothing_is_written(
         self, credentials: tuple[Path, Path], tmp_path: Path
     ) -> None:

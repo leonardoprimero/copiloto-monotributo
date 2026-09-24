@@ -9,6 +9,7 @@ writes one call instead of wiring four, and so the wiring itself is somewhere
 it can be read.
 """
 
+import warnings
 from collections.abc import Callable
 from datetime import datetime
 from pathlib import Path
@@ -89,7 +90,17 @@ def build_registry(
             environment=environment,
         )
         if cache is not None:
-            cache.save(ticket)
+            # WSAA has already issued this ticket and will not issue another for
+            # twelve hours. A cache that cannot be written must not lose it.
+            try:
+                cache.save(ticket)
+            except OSError as error:
+                warnings.warn(
+                    f"The access ticket could not be saved to {ticket_cache}: {error}. "
+                    "It stays in memory, but a new process will be locked out until it expires.",
+                    RuntimeWarning,
+                    stacklevel=2,
+                )
         return ticket
 
     def call_padron(token: str, sign: str, cuit: str) -> str:

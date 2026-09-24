@@ -23,6 +23,7 @@ from copiloto.arca.soap import (
     parse_dummy,
     post_soap,
 )
+from copiloto.arca.ticket_cache import TicketCache
 from copiloto.arca.wsaa import PRODUCCION, AccessTicket, request_ticket
 
 SERVICE = "ws_sr_constancia_inscripcion"
@@ -54,6 +55,7 @@ def build_registry(
     passphrase: bytes | None = None,
     post: Post = _default_post,
     clock: Callable[[], datetime] = utc_now,
+    ticket_cache: Path | None = None,
 ) -> ArcaRegistry:
     """A registry that looks taxpayers up in ARCA, using your certificate.
 
@@ -61,17 +63,33 @@ def build_registry(
     `ws_sr_constancia_inscripcion` to the certificate's CUIT. Without that
     delegation WSAA answers `coe.notAuthorized`, which is the system working
     as intended.
+
+    `ticket_cache` is a file to keep the access ticket in. Without one, the
+    ticket lives as long as this registry, and a second process started
+    within twelve hours is refused with `coe.alreadyAuthenticated`.
     """
     sign_cms = signer_from_files(cert_path, key_path, passphrase=passphrase)
+    cache = (
+        TicketCache(ticket_cache, environment=environment, service=SERVICE)
+        if ticket_cache is not None
+        else None
+    )
 
     def get_ticket(now: datetime) -> AccessTicket:
-        return request_ticket(
+        saved = cache.load() if cache is not None else None
+        if saved is not None and saved.is_valid(at=now):
+            return saved
+
+        ticket = request_ticket(
             SERVICE,
             sign_cms=sign_cms,
             send=post,
             now=now,
             environment=environment,
         )
+        if cache is not None:
+            cache.save(ticket)
+        return ticket
 
     def call_padron(token: str, sign: str, cuit: str) -> str:
         envelope = build_persona_envelope(

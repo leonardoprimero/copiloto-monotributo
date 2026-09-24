@@ -10,7 +10,7 @@ The transport is the only fake. The certificate is real, self-signed, and the
 signature is really computed.
 """
 
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 import pytest
@@ -52,7 +52,13 @@ def credentials(tmp_path: Path) -> tuple[Path, Path]:
     return write_self_signed(tmp_path)
 
 
-def a_registry(credentials: tuple[Path, Path], arca: RecordedArca):
+def a_registry(
+    credentials: tuple[Path, Path],
+    arca: RecordedArca,
+    *,
+    ticket_cache: Path | None = None,
+    now: datetime = NOW,
+):
     cert_path, key_path = credentials
     return build_registry(
         cert_path=cert_path,
@@ -60,7 +66,8 @@ def a_registry(credentials: tuple[Path, Path], arca: RecordedArca):
         represented_cuit="20-11111111-2",
         environment=HOMOLOGACION,
         post=arca,
-        clock=lambda: NOW,
+        clock=lambda: now,
+        ticket_cache=ticket_cache,
     )
 
 
@@ -92,3 +99,43 @@ class TestARealRoundTrip:
         registry.lookup("27-01594221-0")
 
         assert len(arca.to("/LoginCms")) == 1
+
+
+class TestTheTicketOutlivesTheProcess:
+    """A second process must not ask WSAA again while the first ticket lasts."""
+
+    def test_a_second_registry_reuses_the_saved_ticket(
+        self, credentials: tuple[Path, Path], tmp_path: Path
+    ) -> None:
+        arca = RecordedArca()
+        saved = tmp_path / "ticket.json"
+
+        a_registry(credentials, arca, ticket_cache=saved).lookup("27-01594221-0")
+        a_registry(credentials, arca, ticket_cache=saved).lookup("27-01594221-0")
+
+        assert len(arca.to("/LoginCms")) == 1
+        [_, second] = arca.to("/personaServiceA5")
+        assert f"<token>{LOGIN_TOKEN}</token>" in second
+
+    def test_an_expired_saved_ticket_is_replaced(
+        self, credentials: tuple[Path, Path], tmp_path: Path
+    ) -> None:
+        arca = RecordedArca()
+        saved = tmp_path / "ticket.json"
+        a_registry(credentials, arca, ticket_cache=saved).lookup("27-01594221-0")
+
+        the_day_after = NOW + timedelta(days=1)
+        a_registry(credentials, arca, ticket_cache=saved, now=the_day_after).lookup(
+            "27-01594221-0"
+        )
+
+        assert len(arca.to("/LoginCms")) == 2
+
+    def test_without_a_cache_nothing_is_written(
+        self, credentials: tuple[Path, Path], tmp_path: Path
+    ) -> None:
+        before = set((tmp_path).iterdir())
+
+        a_registry(credentials, RecordedArca()).lookup("27-01594221-0")
+
+        assert set(tmp_path.iterdir()) == before

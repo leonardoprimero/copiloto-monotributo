@@ -15,9 +15,8 @@ from collections.abc import Callable
 from datetime import date
 from decimal import Decimal, InvalidOperation
 from pathlib import Path
+from uuid import uuid4
 
-from langchain_core.runnables import RunnableConfig
-from langgraph.types import Command
 from pydantic import ValidationError
 
 from copiloto.analysis import RiskPolicy
@@ -28,10 +27,17 @@ from copiloto.extractors.cli import CliExtractor, run_subprocess
 from copiloto.extractors.fake import FakeExtractor
 from copiloto.extractors.protocol import ExtractionError, InvoiceExtractor
 from copiloto.extractors.resolve import resolve_cli_argv
-from copiloto.graph.builder import build_graph
-from copiloto.models import DeclaredParameters, ExtractedInvoice, TaxpayerProfile
+from copiloto.graph.checkpoints import open_checkpointer
+from copiloto.models import (
+    DeclaredParameters,
+    ExtractedInvoice,
+    HumanDecision,
+    TaxpayerProfile,
+    Verdict,
+)
 from copiloto.registry import MockArcaRegistry
 from copiloto.scales import Scales, load_scales
+from copiloto.service import CaseAlreadyExists, Copilot, PendingReview
 from copiloto.sources import SourceError, load_invoice_texts
 
 _RISK_LABELS = {
@@ -63,7 +69,7 @@ _PARAMETER_FLAGS = {
     "annual_rent": "--annual-rent (alquileres)",
 }
 
-_VERDICTS = {"confirmado": "confirmed", "descartado": "dismissed"}
+_VERDICTS: dict[str, Verdict] = {"confirmado": "confirmed", "descartado": "dismissed"}
 
 
 def _fake_for(case: EvalCase | None) -> FakeExtractor:
@@ -166,7 +172,7 @@ def _print_alert(payload: dict) -> None:
     print()
 
 
-def _ask_accountant() -> dict:
+def _ask_accountant() -> HumanDecision:
     """Ask for the verdict, defaulting to the safer answer.
 
     Pressing enter confirms the alert rather than dismissing it: an accountant
@@ -175,7 +181,7 @@ def _ask_accountant() -> dict:
     answer = input("Veredicto [confirmado/descartado] (confirmado): ").strip().lower()
     verdict = _VERDICTS.get(answer, "confirmed")
     notes = input("Notas (opcional): ").strip()
-    return {"verdict": verdict, "notes": notes, "reviewer": "accountant"}
+    return HumanDecision(verdict=verdict, notes=notes, reviewer="accountant")
 
 
 def _declared_from_args(args: argparse.Namespace) -> DeclaredParameters:
@@ -276,37 +282,97 @@ def _run(args: argparse.Namespace) -> int:
         return 1
 
     today = date.fromisoformat(args.today) if args.today else default_today
-    graph = build_graph(
-        extractor=factory(case),
-        registry=registry,
-        scales=scales,
-        today=today,
-        policy=RiskPolicy(),
-    )
-    config: RunnableConfig = {"configurable": {"thread_id": thread}}
+    case_id = args.case_id or f"{thread}-{uuid4().hex[:8]}"
+    service = _service(args.state_db)
 
-    state = graph.invoke(
-        {"taxpayer_cuit": taxpayer_cuit, "raw_invoices": raw_invoices, "declared": declared},
-        config,
-    )
+    try:
+        outcome = service.start(
+            case_id=case_id,
+            taxpayer_cuit=taxpayer_cuit,
+            raw_invoices=raw_invoices,
+            extractor=factory(case),
+            registry=registry,
+            today=today,
+            declared=declared,
+        )
+    except CaseAlreadyExists:
+        print(f"Ya existe un caso {case_id}. Elegí otro --case-id.", file=sys.stderr)
+        return 2
 
-    if "__interrupt__" in state:
-        payload = state["__interrupt__"][0].value
-        _print_alert(payload)
+    if isinstance(outcome, PendingReview):
+        _print_alert(outcome.alert)
+
+        if args.no_wait:
+            print(f"Caso pendiente: {case_id}")
+            print(
+                "Quedó guardado. Cuando el contador lo revise:\n"
+                f"  copiloto review --state-db {args.state_db} --case-id {case_id}"
+            )
+            return 3
 
         if args.auto_resume:
-            decision = {
-                "verdict": "confirmed",
-                "notes": "Reanudación automática; nadie revisó el caso.",
-                "reviewer": "auto",
-            }
+            decision = HumanDecision(
+                verdict="confirmed",
+                notes="Reanudación automática; nadie revisó el caso.",
+                reviewer="auto",
+            )
             print("Reanudación automática: ningún contador revisó este caso.\n")
         else:
             decision = _ask_accountant()
 
-        state = graph.invoke(Command(resume=decision), config)
+        outcome = service.resume(case_id, decision)
 
-    print(state["report"])
+    print(outcome.report)
+    return 0
+
+
+def _service(state_db: str | None) -> Copilot:
+    path = Path(state_db) if state_db else None
+    return Copilot(scales=load_scales(), policy=RiskPolicy(), checkpointer=open_checkpointer(path))
+
+
+def _review(args: argparse.Namespace) -> int:
+    service = _service(args.state_db)
+    found = service.get(args.case_id)
+
+    if not isinstance(found, PendingReview):
+        state = "ya fue revisado" if found is not None else "no existe"
+        print(
+            f"El caso {args.case_id} {state}. `copiloto cases --state-db {args.state_db}` "
+            "lista los que hay.",
+            file=sys.stderr,
+        )
+        return 1
+
+    _print_alert(found.alert)
+    if args.verdict:
+        decision = HumanDecision(
+            verdict=_VERDICTS[args.verdict], notes=args.notes or "", reviewer="accountant"
+        )
+    else:
+        decision = _ask_accountant()
+
+    print(service.resume(args.case_id, decision).report)
+    return 0
+
+
+_STATUS_LABELS = {"pending": "pendiente", "done": "cerrado", "incomplete": "incompleto"}
+
+
+def _cases(args: argparse.Namespace) -> int:
+    summaries = _service(args.state_db).list_cases()
+    if not summaries:
+        print("No hay casos en este archivo.")
+        return 0
+
+    print(f"{'caso':<28} {'estado':<11} {'CUIT':<14} {'cat.':<5} {'riesgo':<20} creado")
+    for s in summaries:
+        risk = _RISK_LABELS.get(s.risk_level or "", s.risk_level or "-")
+        created = (s.created_at or "")[:19].replace("T", " ")
+        print(
+            f"{s.case_id:<28} {_STATUS_LABELS[s.status]:<11} {s.taxpayer_cuit:<14} "
+            f"{s.registered_category or '-':<5} {risk:<20} {created}"
+        )
     return 0
 
 
@@ -357,9 +423,51 @@ def main(argv: list[str] | None = None) -> int:
         action="store_true",
         help="Reanudar sin preguntar. El informe aclara que nadie lo revisó.",
     )
+    _add_state_arguments(run)
+    run.add_argument(
+        "--no-wait",
+        action="store_true",
+        help="Si el caso se deriva, dejarlo guardado y salir en vez de preguntar. Requiere --state-db.",
+    )
+
+    review = sub.add_parser("review", help="Retomar un caso pendiente y darle el veredicto.")
+    _add_state_arguments(review, required=True)
+    review.add_argument(
+        "--verdict", choices=tuple(_VERDICTS), help="Si falta, se pregunta por teclado."
+    )
+    review.add_argument("--notes", help="Notas del contador para el informe.")
+
+    cases = sub.add_parser("cases", help="Listar los casos guardados y su estado.")
+    cases.add_argument("--state-db", required=True, help="Archivo SQLite con los casos.")
 
     args = parser.parse_args(argv)
+
+    if args.command == "review":
+        return _review(args)
+    if args.command == "cases":
+        return _cases(args)
+    if args.no_wait and not args.state_db:
+        print(
+            "--no-wait necesita --state-db: sin un archivo, el caso pendiente se pierde "
+            "cuando termina el proceso.",
+            file=sys.stderr,
+        )
+        return 2
     return _run(args)
+
+
+def _add_state_arguments(parser: argparse.ArgumentParser, *, required: bool = False) -> None:
+    parser.add_argument(
+        "--state-db",
+        required=required,
+        default=None if required else os.environ.get("COPILOTO_STATE_DB") or None,
+        help="Archivo SQLite donde guardar los casos. Sin él, todo vive en memoria.",
+    )
+    parser.add_argument(
+        "--case-id",
+        required=required,
+        help="Identificador del caso." + ("" if required else " Por defecto se genera uno."),
+    )
 
 
 if __name__ == "__main__":

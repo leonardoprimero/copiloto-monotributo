@@ -1,6 +1,6 @@
 [project]
 name = "copiloto"
-version = "0.2.0"
+version = "0.3.0"
 description = "A LangGraph copilot that estimates monotributo category and exclusion risk from synthetic invoices."
 readme = "README.md"
 # Pinned below 3.13: langchain-core warns that Pydantic V1 internals are not
@@ -32,6 +32,10 @@ ocr = [
     "pillow>=12.3.0",
     "pypdfium2>=5.13.0",
     "pytesseract>=0.3.13",
+]
+arca = [
+    "cryptography>=50.0.1",
+    "defusedxml>=0.7.1",
 ]
 
 [build-system]

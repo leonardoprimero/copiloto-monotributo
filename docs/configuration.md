@@ -79,3 +79,32 @@ every case. It is ignored by git.
 The web server binds to localhost on purpose. It has no users, no
 authentication and no rate limiting: anyone who can reach it can open every
 case. Put it behind something that does those jobs before exposing it.
+
+## Access token
+
+| Variable | Default | Used by |
+| --- | --- | --- |
+| `COPILOTO_TOKEN` | unset, meaning no login | `serve` |
+
+Unset, the web interface is open. That is the right default for a tool on your
+own laptop, and it is why the server binds to localhost. Set it, and every page
+except the login and the stylesheet needs a session first.
+
+One shared token is not an identity system: it answers whether somebody is
+allowed in, not who they are. Serving off localhost without it prints a warning
+naming what gets published, because a case page is somebody's income.
+
+Over plain HTTP the token travels in the clear. Put TLS in front of it before
+it crosses anything you do not control.
+
+## Optional extras
+
+| Extra | Brings | Needed for |
+| --- | --- | --- |
+| `ocr` | pypdfium2, pytesseract, pillow | Reading scanned PDFs. Also needs the `tesseract` binary with Spanish data. |
+| `arca` | defusedxml, cryptography | The real padrón client in `copiloto.arca`. |
+| `api` | langchain-anthropic, langchain-openai | Extracting with a provider API. |
+
+None of them are needed by the copilot itself. Without `ocr` a scanned invoice
+is refused rather than skipped; without `arca` nothing changes, since the
+default registry is the mock one.

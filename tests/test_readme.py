@@ -84,6 +84,51 @@ class TestExtractorModes:
         assert "Sin API key" in README
 
 
+class TestArcaHonesty:
+    """The padrón client is the one piece that was never run for real."""
+
+    def test_the_readme_says_it_never_ran_against_arca(self) -> None:
+        assert "Nunca se ejecutó contra ARCA" in README
+
+    def test_the_integration_guide_exists_and_is_linked(self) -> None:
+        assert "docs/arca-padron.md" in README
+        assert (ROOT / "docs" / "arca-padron.md").exists()
+
+    def test_the_guide_names_its_sources(self) -> None:
+        """A contract copied from memory is worth nothing; cite the manuals."""
+        guide = (ROOT / "docs" / "arca-padron.md").read_text(encoding="utf-8")
+
+        assert "ws_sr_constancia_inscripcion" in guide
+        assert "1.2.2" in guide
+        assert "3.4" in guide
+
+    def test_the_guide_keeps_the_promise_about_the_clave_fiscal(self) -> None:
+        guide = (ROOT / "docs" / "arca-padron.md").read_text(encoding="utf-8")
+
+        assert "nunca pide la clave fiscal" in guide
+        assert "Administrador de Relaciones" in guide
+
+    def test_the_guide_says_what_is_not_implemented(self) -> None:
+        guide = (ROOT / "docs" / "arca-padron.md").read_text(encoding="utf-8")
+
+        assert "**No implementado**" in guide
+
+
+class TestOcrAndParallel:
+    def test_the_ocr_extra_is_documented(self) -> None:
+        assert "uv sync --extra ocr" in README
+
+    def test_it_says_a_scan_is_never_skipped_silently(self) -> None:
+        assert "nunca saltea una" in README
+
+    def test_it_says_ocr_sends_the_case_to_a_person(self) -> None:
+        """The whole safety argument for OCR rests on this."""
+        assert "contador aunque los números den tranquilos" in README
+
+    def test_the_parallel_reading_is_described(self) -> None:
+        assert "en paralelo" in README
+
+
 class TestWebAndHandoff:
     def test_the_web_command_is_in_the_quickstart(self) -> None:
         assert "uv run copiloto serve" in README
@@ -94,6 +139,12 @@ class TestWebAndHandoff:
 
     def test_the_state_variable_is_named(self) -> None:
         assert "COPILOTO_STATE_DB" in README
+
+    def test_the_access_token_is_documented_where_it_is_configured(self) -> None:
+        config = (ROOT / "docs" / "configuration.md").read_text(encoding="utf-8")
+
+        assert "COPILOTO_TOKEN" in config
+        assert "not an identity system" in config
 
     def test_the_declared_parameters_are_documented_with_their_flags(self) -> None:
         for flag in ("--surface-m2", "--energy-kwh", "--annual-rent"):

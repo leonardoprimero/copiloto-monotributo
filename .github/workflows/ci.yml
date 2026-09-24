@@ -23,11 +23,26 @@ jobs:
         run: uv sync --dev
 
       - name: Tests
+        # Deliberately before any extra is installed: this is the fresh clone
+        # the README promises, and the optional features must skip, not fail.
         run: uv run python -m pytest
 
       - name: Evals
         # The offline suite is deterministic, so anything below 100% is a bug.
         run: uv run python -m copiloto.evals --extractor fake --threshold 1.0
+
+      - name: Install the OCR engine
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y tesseract-ocr tesseract-ocr-spa
+
+      - name: Install every optional extra
+        run: uv sync --dev --extra ocr --extra arca
+
+      - name: Tests with the extras installed
+        # Now the OCR integration test reads a real scanned PDF instead of
+        # skipping itself, and the ARCA suite type-checks against its deps.
+        run: uv run python -m pytest
 
       - name: Types
         run: uv run --with pyright pyright

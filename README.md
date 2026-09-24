@@ -231,8 +231,16 @@ Necesitás [uv](https://docs.astral.sh/uv/) y Python 3.12.
 
 ```sh
 uv sync
-uv run pytest                                   # 632 tests, sin red
+uv run pytest                                   # 750 tests, sin red
 uv run python -m copiloto.evals                 # 14 casos, sin red
+```
+
+Los extras son opcionales y nada del copiloto básico los necesita:
+
+```sh
+uv sync --extra ocr     # leer facturas escaneadas (además, instalá tesseract)
+uv sync --extra arca    # consultar el padrón real (ver docs/arca-padron.md)
+uv sync --extra api     # extraer con una API de proveedor
 ```
 
 ### Desde el navegador
@@ -295,9 +303,26 @@ padrón aportaría es la categoría en la que estás registrado, y esa letra ya 
 sabés: está en tu credencial y en el pago mensual. Preferímos preguntártela
 antes que sostener la clave fiscal de nadie.
 
-Los PDF de ARCA suelen traer el texto embebido, así que se leen directo. Si un
-PDF es una imagen escaneada, el programa te lo dice y frena: **nunca saltea una
-factura en silencio**, porque eso bajaría tu acumulado sin que te enteres.
+Los PDF de ARCA suelen traer el texto embebido, así que se leen directo y de
+forma exacta. Si un PDF es una imagen escaneada, con el extra `ocr` instalado
+se lee reconociendo los píxeles, y sin él el programa te lo dice y frena:
+**nunca saltea una factura en silencio**, porque eso bajaría tu acumulado sin
+que te enteres.
+
+El OCR adivina —un 3 puede volver 8— así que todo caso que lo usó va a un
+contador aunque los números den tranquilos, y el informe nombra los archivos
+que hay que cotejar contra el original:
+
+```sh
+brew install tesseract tesseract-lang     # o apt install tesseract-ocr-spa
+uv sync --extra ocr
+```
+
+Las facturas se leen **en paralelo**, una tarea por comprobante en un solo
+superstep del grafo. Doce facturas a 0,8 s cada lectura pasan de 9,6 s a 0,8 s.
+Y si el proceso se cae a mitad de camino, reanudar relee solo la factura
+interrumpida: LangGraph guarda lo que las otras tareas ya escribieron, que con
+un proveedor pago es la diferencia entre un cargo y doce.
 
 ### Dejarle el caso a un contador
 
@@ -422,24 +447,30 @@ src/copiloto/
   analysis.py report.py          el veredicto, el margen y cómo se cuenta
   extractors/                    fake, cli y api detrás de un Protocol
   registry.py                    consulta simulada al padrón
+  ocr.py sources.py              leer facturas de texto, PDF y escaneos
+  arca/                          el padrón real: wsaa, padron, registry
   graph/                         estado, nodos, ruteo, builder, checkpoints, diagrama
   service.py                     arrancar, consultar, reanudar y listar casos
-  web/                           la interfaz: FastAPI, plantillas, estilo
+  web/                           la interfaz: FastAPI, plantillas, estilo, clave
   evals/                         dataset, runner, punto de entrada
   cli.py                         run, review, cases, serve
 ```
 
 ## Roadmap
 
-Fuera de alcance por ahora, listado para que nadie asuma lo contrario: facturas
-escaneadas (OCR), las causales de exclusión que no dependen de un parámetro
-declarable, extracción en paralelo, usuarios y autenticación en la web, y
-cualquier contacto con servicios reales de ARCA o datos reales de contribuyentes.
+Fuera de alcance por ahora, listado para que nadie asuma lo contrario: las
+causales de exclusión que no dependen de un parámetro declarable, los usuarios
+y permisos de la web más allá de una clave compartida, la firma CMS y el
+transporte SOAP del cliente de ARCA, y cualquier llamada real a ARCA o dato
+real de un contribuyente.
 
-Una consulta de padrón real sería otra implementación del Protocol del
-registro, desplegada de forma privada, autenticándose como sí misma bajo el
-modelo de delegación de ARCA — de modo que el contribuyente otorgue y revoque el
-acceso sin entregar nunca una contraseña.
+La consulta al padrón real es otra implementación del mismo Protocol, en
+`arca/`, verificada contra los manuales oficiales de ARCA y probada contra los
+ejemplos que esos manuales publican. **Nunca se ejecutó contra ARCA**: hace
+falta un certificado, y este repositorio no tiene ni pide ninguno. La firma CMS
+y el transporte SOAP quedan como argumentos inyectados, que es donde cada
+despliegue pone los suyos. Está todo en [docs/arca-padron.md](docs/arca-padron.md),
+incluido por qué probablemente no lo necesites.
 
 ## Licencia
 

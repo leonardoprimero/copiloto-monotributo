@@ -11,6 +11,14 @@ dependencies = [
     "pydantic>=2,<3",
 ]
 
+# Optional: only needed for COPILOTO_EXTRACTOR=api. The default (fake) and the
+# cli mode work with nothing installed beyond the base dependencies.
+[project.optional-dependencies]
+api = [
+    "langchain-anthropic>=1,<2",
+    "langchain-openai>=1,<2",
+]
+
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"

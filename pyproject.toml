@@ -11,6 +11,9 @@ dependencies = [
     "pydantic>=2,<3",
 ]
 
+[project.scripts]
+copiloto = "copiloto.cli:main"
+
 # Optional: only needed for COPILOTO_EXTRACTOR=api. The default (fake) and the
 # cli mode work with nothing installed beyond the base dependencies.
 [project.optional-dependencies]

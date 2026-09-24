@@ -41,10 +41,15 @@ _NO_CLI_MESSAGE = (
 )
 
 
-def resolve_cli_argv(
-    *, env: Mapping[str, str], which: Which = shutil.which
-) -> list[str]:
-    """Return the command to invoke, or explain why none could be chosen."""
+def resolve_cli_argv(*, env: Mapping[str, str], which: Which | None = None) -> list[str]:
+    """Return the command to invoke, or explain why none could be chosen.
+
+    `which` is resolved at call time rather than bound as a default argument.
+    A default evaluated at import time cannot be replaced by a test, which
+    would quietly turn an offline test into a real subprocess call.
+    """
+    which = which or shutil.which
+
     explicit = env.get("COPILOTO_EXTRACTOR_CMD", "").strip()
     if explicit:
         return shlex.split(explicit)

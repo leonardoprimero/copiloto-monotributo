@@ -83,6 +83,21 @@ class TestNothingAvailable:
         assert "COPILOTO_EXTRACTOR=api" in message
 
 
+class TestInjectionSeam:
+    def test_which_is_resolved_at_call_time_not_at_import_time(
+        self, monkeypatch
+    ) -> None:
+        """A default bound at import time cannot be replaced by a test.
+
+        When it was, patching `shutil.which` had no effect, the resolver found
+        a real CLI, and an offline test spawned a real model call and hung.
+        """
+        monkeypatch.setattr("copiloto.extractors.resolve.shutil.which", lambda _n: None)
+
+        with pytest.raises(ExtractionError):
+            resolve_cli_argv(env={})
+
+
 class TestAdapterDefinitions:
     def test_every_adapter_invokes_its_own_binary(self) -> None:
         for name, argv in KNOWN_CLI_ADAPTERS.items():

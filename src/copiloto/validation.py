@@ -8,6 +8,7 @@ a key or a network.
 from datetime import date
 from decimal import Decimal
 
+from copiloto.cuit import is_valid_cuit, normalize_cuit
 from copiloto.dates import one_year_before, within_window
 from copiloto.models import ExtractedInvoice, InvoiceItem, Issue
 from copiloto.scales import Scales
@@ -48,6 +49,36 @@ def _check_unit_price(
             invoice,
         )
     return None
+
+
+def validate_invoice_identity(invoice: ExtractedInvoice, taxpayer_cuit: str) -> list[Issue]:
+    """Check the issuing CUIT: well formed first, then the right person.
+
+    A malformed CUIT is reported once and not also as a mismatch. Two issues
+    for one problem would make the report read as if there were two.
+    """
+    if not is_valid_cuit(invoice.issuer_cuit):
+        return [
+            _issue(
+                "INVALID_CUIT",
+                "warning",
+                f"The issuing CUIT {invoice.issuer_cuit} does not pass the check digit.",
+                invoice,
+            )
+        ]
+
+    if normalize_cuit(invoice.issuer_cuit) != normalize_cuit(taxpayer_cuit):
+        return [
+            _issue(
+                "ISSUER_MISMATCH",
+                "warning",
+                f"The invoice was issued by {invoice.issuer_cuit}, not by the "
+                f"taxpayer under analysis ({taxpayer_cuit}).",
+                invoice,
+            )
+        ]
+
+    return []
 
 
 def validate_invoice_dates(invoice: ExtractedInvoice, *, today: date) -> list[Issue]:

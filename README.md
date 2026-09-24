@@ -231,7 +231,7 @@ Necesitás [uv](https://docs.astral.sh/uv/) y Python 3.12.
 
 ```sh
 uv sync
-uv run pytest                                   # 777 tests, sin red
+uv run pytest                                   # 781 tests, sin red
 uv run python -m copiloto.evals                 # 14 casos, sin red
 ```
 
@@ -475,6 +475,10 @@ rechazado por estar roto.
 
 Está todo en [docs/arca-padron.md](docs/arca-padron.md), separando qué se
 verificó de qué no, y explicando por qué probablemente no lo necesites.
+
+## Historial
+
+Los cambios de cada versión están en [CHANGELOG.md](CHANGELOG.md).
 
 ## Licencia
 

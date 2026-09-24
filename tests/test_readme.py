@@ -216,3 +216,26 @@ class TestLicense:
 
     def test_the_readme_declares_it(self) -> None:
         assert "MIT" in README
+
+
+class TestChangelog:
+    """A changelog that drifts from the code is worse than none at all."""
+
+    def changelog(self) -> str:
+        return (ROOT / "CHANGELOG.md").read_text(encoding="utf-8")
+
+    def test_it_exists(self) -> None:
+        assert self.changelog().startswith("# Registro de cambios")
+
+    def test_the_current_version_has_an_entry(self) -> None:
+        version = (ROOT / "pyproject.toml").read_text(encoding="utf-8")
+        current = version.split('version = "')[1].split('"')[0]
+
+        assert f"## [{current}]" in self.changelog()
+
+    def test_it_records_what_could_not_be_verified(self) -> None:
+        """The ARCA client is the one piece with an unverified half."""
+        assert "No se pudo comprobar" in self.changelog()
+
+    def test_it_records_the_sha1_finding(self) -> None:
+        assert "SHA256" in self.changelog()

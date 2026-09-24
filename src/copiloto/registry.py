@@ -39,6 +39,24 @@ class MockArcaRegistry:
         return tuple(self._profiles)
 
 
+class UnavailableRegistry:
+    """A registry for graphs that must never look anything up.
+
+    A case resumed after a pause already carries its taxpayer in the checkpoint,
+    and the lookup node does not run again. Whoever resumes may not have the
+    declared category at hand, so instead of inventing one, the resume graph
+    gets a registry that fails loudly if any node consults it.
+    """
+
+    def lookup(self, cuit: str) -> TaxpayerProfile | None:
+        raise RuntimeError(
+            f"The registry was consulted for {cuit} on a graph that must not look up anyone."
+        )
+
+    def known_cuits(self) -> tuple[str, ...]:
+        return ()
+
+
 # Synthetic taxpayers used by the demo and the eval cases. The repeated digit
 # patterns make it obvious at a glance that none of these belong to a person;
 # each one still carries a correct check digit so validation exercises the real

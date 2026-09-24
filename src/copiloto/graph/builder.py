@@ -10,7 +10,7 @@ by a real model without any of the nodes knowing the difference.
 
 from datetime import date
 
-from langgraph.checkpoint.memory import InMemorySaver
+from langgraph.checkpoint.base import BaseCheckpointSaver
 from langgraph.graph import END, START, StateGraph
 
 from copiloto.analysis import RiskPolicy
@@ -23,8 +23,8 @@ from copiloto.graph.nodes import (
     make_review_node,
     make_validate_node,
 )
+from copiloto.graph.checkpoints import open_checkpointer
 from copiloto.graph.routing import make_router
-from copiloto.graph.serde import copilot_serde
 from copiloto.graph.state import CopilotState
 from copiloto.registry import TaxpayerRegistry
 from copiloto.scales import Scales
@@ -37,14 +37,14 @@ def build_graph(
     scales: Scales,
     today: date,
     policy: RiskPolicy,
-    checkpointer=None,
+    checkpointer: BaseCheckpointSaver | None = None,
 ):
     """Wire and compile the copilot graph.
 
-    A checkpointer is always present because `interrupt()` requires one; an
-    in-memory saver is enough while the process stays alive between the pause
-    and the resume. Its serializer declares this project's types explicitly so
-    the state survives the pause unchanged.
+    A checkpointer is always present because `interrupt()` requires one. The
+    default is in memory, enough while the process stays alive between the
+    pause and the resume; pass the SQLite one from `open_checkpointer` when the
+    resume may happen from another process.
     """
     workflow = StateGraph(CopilotState)
 
@@ -72,6 +72,4 @@ def build_graph(
     workflow.add_edge("request_accountant_review", "write_report")
     workflow.add_edge("write_report", END)
 
-    return workflow.compile(
-        checkpointer=checkpointer or InMemorySaver(serde=copilot_serde())
-    )
+    return workflow.compile(checkpointer=checkpointer or open_checkpointer(None))

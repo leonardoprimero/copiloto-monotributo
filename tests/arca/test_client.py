@@ -148,7 +148,11 @@ class TestTheTicketOutlivesTheProcess:
 
         a_registry(credentials, arca, ticket_cache=saved).lookup("27-01594221-0")
         a_registry(other_credentials, arca, ticket_cache=saved).lookup("27-01594221-0")
+        assert len(arca.to("/LoginCms")) == 2
 
+        # Both tickets live in the file now: neither certificate logs in again.
+        a_registry(credentials, arca, ticket_cache=saved).lookup("27-01594221-0")
+        a_registry(other_credentials, arca, ticket_cache=saved).lookup("27-01594221-0")
         assert len(arca.to("/LoginCms")) == 2
 
     def test_a_cache_that_cannot_be_written_does_not_lose_the_ticket(

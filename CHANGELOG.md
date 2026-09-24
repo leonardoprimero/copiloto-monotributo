@@ -22,12 +22,14 @@ tres cosas que los manuales no muestran.
 - **La caché del ticket ahora sabe de qué certificado es.** WSAA ata cada
   ticket al certificado que firmó el pedido; dos certificados compartiendo el
   archivo se prestaban el ticket y el segundo era rechazado. El archivo guarda
-  la huella SHA-256 del certificado y un ticket ajeno se ignora. Un archivo
-  de la versión anterior se descarta y se pide uno nuevo.
+  un ticket por ambiente, servicio y huella SHA-256 del certificado, sin que
+  uno pise al otro. Un archivo de la versión anterior, que no anotaba el
+  certificado, se sigue leyendo: descartarlo habría pedido otro ticket y
+  recibido `coe.alreadyAuthenticated` hasta que venciera.
 - **El temporal de la caché ya no tiene nombre predecible.** Se crea con
-  `mkstemp` (exclusivo, `600`, sin seguir symlinks) y se sincroniza a disco
-  antes de reemplazar al anterior. Antes, un symlink plantado en
-  `.ticket.json.tmp` desviaba la credencial a donde apuntara.
+  `mkstemp` (exclusivo, `600`, sin seguir symlinks), se sincroniza a disco
+  antes de reemplazar al anterior, y el directorio también. Antes, un symlink
+  plantado en `.ticket.json.tmp` desviaba la credencial a donde apuntara.
 - **Lo guardado se valida antes de usarse.** Un vencimiento sin zona horaria o
   un `token` que no es texto se tratan como ausentes, en vez de fallar en
   medio de una consulta.

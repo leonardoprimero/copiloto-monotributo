@@ -119,14 +119,66 @@ class TestItIsNotTrustedBlindly:
 
         assert cache(path, certificate="huella-2").load() is None
 
+    def test_two_certificates_share_the_file_without_evicting_each_other(
+        self, path: Path
+    ) -> None:
+        """If saving one certificate's ticket threw the other's away, two
+        registries alternating on one file would lock each other out."""
+        other = AccessTicket(token="otro", sign="otra", expires_at=NOW + timedelta(hours=6))  # noqa: S106
+
+        cache(path, certificate="huella-1").save(TICKET)
+        cache(path, certificate="huella-2").save(other)
+
+        assert cache(path, certificate="huella-1").load() == TICKET
+        assert cache(path, certificate="huella-2").load() == other
+
+    def test_a_file_from_before_certificates_were_recorded_is_still_used(
+        self, path: Path
+    ) -> None:
+        """The previous version wrote one ticket with no certificate. Discarding
+        it would ask WSAA again and be refused until it expires."""
+        legacy = {
+            "environment": HOMOLOGACION,
+            "service": SERVICE,
+            "token": TICKET.token,
+            "sign": TICKET.sign,
+            "expires_at": TICKET.expires_at.isoformat(),
+        }
+        path.write_text(json.dumps(legacy))
+
+        assert cache(path).load() == TICKET
+
+    def test_a_legacy_file_survives_a_save_for_another_certificate(self, path: Path) -> None:
+        legacy = {
+            "environment": HOMOLOGACION,
+            "service": SERVICE,
+            "token": TICKET.token,
+            "sign": TICKET.sign,
+            "expires_at": TICKET.expires_at.isoformat(),
+        }
+        path.write_text(json.dumps(legacy))
+        other = AccessTicket(token="otro", sign="otra", expires_at=NOW + timedelta(hours=6))  # noqa: S106
+
+        cache(path, certificate="huella-2").save(other)
+
+        assert cache(path, certificate="huella-1").load() == TICKET
+        assert cache(path, certificate="huella-2").load() == other
+
     def test_an_expiry_without_a_timezone_is_treated_as_absent(self, path: Path) -> None:
         """Comparing it with an aware clock would raise, far from here."""
         path.write_text(saved_fields(expires_at="2026-09-25T09:00:00"))
 
         assert cache(path).load() is None
 
-    def test_fields_of_the_wrong_type_are_treated_as_absent(self, path: Path) -> None:
-        path.write_text(saved_fields(token=123))
+    @pytest.mark.parametrize(
+        "changes",
+        [{"token": 123}, {"sign": None}, {"token": ""}, {"expires_at": 20260925}],
+        ids=["token-not-text", "sign-null", "token-empty", "expiry-not-text"],
+    )
+    def test_fields_of_the_wrong_type_are_treated_as_absent(
+        self, path: Path, changes: dict[str, object]
+    ) -> None:
+        path.write_text(saved_fields(**changes))
 
         assert cache(path).load() is None
 

@@ -11,12 +11,20 @@ The file holds a credential, so three rules:
   with a fresh, unpredictable name that replaces the old one in a single
   step. A crash mid-write leaves the previous ticket, never half of one, and
   nobody can plant a path for the credential to be written through.
-- It records the environment, the service and the certificate it was issued
-  for. WSAA binds a ticket to all three: a homologación ticket is refused by
-  production, and one certificate's ticket is refused for another. Asking
-  with the wrong one wastes a call against a daily limit.
+- It records the environment, the service and the certificate each ticket was
+  issued for. WSAA binds a ticket to all three: a homologación ticket is
+  refused by production, and one certificate's ticket is refused for another.
+  Asking with the wrong one wastes a call against a daily limit.
+- One file holds one ticket per environment, service and certificate. Two
+  registries sharing a file must not evict each other's ticket, or each
+  would keep logging in and being refused.
 - Anything in it that cannot be read or does not match is treated as absent.
   The cache may save a login; it must never be the reason one fails.
+
+The first version of this file held a single ticket and did not record the
+certificate. Such a file is still read, on the assumption the previous
+version made: that it belongs to the one certificate in use. Discarding it
+would ask WSAA again and be refused until the ticket expires.
 """
 
 import json
@@ -48,35 +56,44 @@ class TicketCache:
         Expiry is not checked here: whether a ticket is still usable depends
         on the moment of the call, and `AccessTicket.is_valid` decides that.
         """
-        try:
-            saved = json.loads(self._path.read_text(encoding="utf-8"))
-            issued_for = (saved["environment"], saved["service"], saved["certificate"])
-            if issued_for != (self._environment, self._service, self._certificate):
-                return None
-            token, sign = saved["token"], saved["sign"]
-            if not isinstance(token, str) or not isinstance(sign, str) or not token or not sign:
-                return None
-            expires_at = datetime.fromisoformat(saved["expires_at"])
-            if expires_at.tzinfo is None:
-                # An aware clock cannot be compared with it; refusing here
-                # beats a TypeError in the middle of a lookup.
-                return None
-            return AccessTicket(token=token, sign=sign, expires_at=expires_at)
-        except (OSError, ValueError, KeyError, TypeError):
-            return None
+        tickets = self._read()
+        entry = tickets.get(self._key(self._certificate))
+        if entry is None:
+            # Written before certificates were recorded; see the module note.
+            entry = tickets.get(self._key(None))
+        return _ticket_from(entry) if entry is not None else None
 
     def save(self, ticket: AccessTicket) -> None:
-        """Replace whatever was saved with this ticket, atomically."""
-        payload = json.dumps(
-            {
-                "environment": self._environment,
-                "service": self._service,
-                "certificate": self._certificate,
-                "token": ticket.token,
-                "sign": ticket.sign,
-                "expires_at": ticket.expires_at.isoformat(),
-            }
-        )
+        """Record this ticket for this certificate, keeping the others, atomically."""
+        tickets = self._read()
+        tickets[self._key(self._certificate)] = {
+            "token": ticket.token,
+            "sign": ticket.sign,
+            "expires_at": ticket.expires_at.isoformat(),
+        }
+        self._write(json.dumps({"tickets": tickets}))
+
+    def _key(self, certificate: str | None) -> str:
+        return json.dumps([self._environment, self._service, certificate])
+
+    def _read(self) -> dict[str, object]:
+        """Every entry in the file by key, in either format. Unreadable is empty."""
+        try:
+            saved = json.loads(self._path.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            return {}
+        if not isinstance(saved, dict):
+            return {}
+        tickets = saved.get("tickets")
+        if isinstance(tickets, dict):
+            return dict(tickets)
+        if "token" in saved:
+            # The single-ticket format, with or without a certificate.
+            key = json.dumps([saved.get("environment"), saved.get("service"), saved.get("certificate")])
+            return {key: saved}
+        return {}
+
+    def _write(self, payload: str) -> None:
         self._path.parent.mkdir(parents=True, exist_ok=True)
         # mkstemp picks a name nobody could have planted, creates it with
         # O_EXCL and owner-only permissions from the start, and never follows
@@ -97,3 +114,38 @@ class TicketCache:
         except BaseException:
             temporary.unlink(missing_ok=True)
             raise
+        _fsync_directory(self._path.parent)
+
+
+def _ticket_from(entry: object) -> AccessTicket | None:
+    """A ticket out of one saved entry, or None if any of it is not trustworthy."""
+    if not isinstance(entry, dict):
+        return None
+    token, sign, expires = entry.get("token"), entry.get("sign"), entry.get("expires_at")
+    if not isinstance(token, str) or not isinstance(sign, str) or not token or not sign:
+        return None
+    if not isinstance(expires, str):
+        return None
+    try:
+        expires_at = datetime.fromisoformat(expires)
+    except ValueError:
+        return None
+    if expires_at.tzinfo is None:
+        # An aware clock cannot be compared with it; refusing here beats a
+        # TypeError in the middle of a lookup.
+        return None
+    return AccessTicket(token=token, sign=sign, expires_at=expires_at)
+
+
+def _fsync_directory(directory: Path) -> None:
+    """Make the rename itself durable. Not every filesystem allows it; then it is skipped."""
+    try:
+        descriptor = os.open(directory, os.O_RDONLY)
+    except OSError:
+        return
+    try:
+        os.fsync(descriptor)
+    except OSError:
+        pass
+    finally:
+        os.close(descriptor)

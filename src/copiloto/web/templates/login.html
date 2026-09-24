@@ -1,0 +1,22 @@
+{% extends "base.html" %}
+{% block title %}Entrar - Copiloto de monotributo{% endblock %}
+
+{% block content %}
+<section class="card narrow">
+  <h1>Entrar</h1>
+  <p class="lead">
+    Este copiloto está protegido con una clave compartida. Pedísela a quien
+    haya levantado el servidor.
+  </p>
+
+  {% if error %}
+  <p class="error" role="alert">{{ error }}</p>
+  {% endif %}
+
+  <form method="post" action="/entrar" class="stack">
+    <label for="token">Clave de acceso</label>
+    <input type="password" id="token" name="token" autocomplete="current-password" autofocus required>
+    <button type="submit" class="primary">Entrar</button>
+  </form>
+</section>
+{% endblock %}

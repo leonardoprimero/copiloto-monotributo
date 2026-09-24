@@ -39,6 +39,13 @@ from copiloto.report import DISCLAIMER_ES, REASON_LABELS, RISK_LABELS, format_mo
 from copiloto.scales import load_scales
 from copiloto.service import CaseSummary, Copilot, Finished, PendingReview
 from copiloto.ocr import default_ocr
+from copiloto.web.auth import (
+    COOKIE_MAX_AGE,
+    COOKIE_NAME,
+    session_is_valid,
+    session_value,
+    token_matches,
+)
 from copiloto.sources import InvoiceSource, SourceError, load_invoice_sources, ocr_issue
 
 ROOT = Path(__file__).resolve().parents[3]
@@ -77,6 +84,7 @@ class WebSettings:
     cases_dir: Path = CASES_DIR
     policy: RiskPolicy = field(default_factory=RiskPolicy)
     ocr: Callable[[Path], str] | None = field(default_factory=default_ocr)
+    access_token: str | None = None
 
 
 class FormError(ValueError):
@@ -183,11 +191,66 @@ def create_app(settings: WebSettings) -> FastAPI:
     app = FastAPI(title="Copiloto de monotributo", docs_url=None, redoc_url=None)
     app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
 
+    token = settings.access_token
+    # Reachable without a session: the login itself, and the stylesheet, which
+    # holds nothing and whose absence would only make the login page ugly.
+    open_paths = ("/entrar", "/static")
+
+    if token:
+
+        @app.middleware("http")
+        async def require_session(request: Request, call_next):
+            """One door in front of everything that is not the door itself."""
+            path = request.url.path
+            if path.startswith(open_paths) or session_is_valid(
+                token, request.cookies.get(COOKIE_NAME)
+            ):
+                return await call_next(request)
+            return RedirectResponse("/entrar", status_code=303)
+
+        @app.get("/entrar", response_class=HTMLResponse)
+        def login_form(request: Request):
+            return render(request, "login.html", authenticated=False)
+
+        @app.post("/entrar", response_class=HTMLResponse)
+        def login(request: Request, token_field: str = Form("", alias="token")):
+            if not token_matches(token, token_field):
+                # Deliberately the same message for an empty field and a wrong
+                # guess: which one it was is not the guesser's business.
+                return render(
+                    request,
+                    "login.html",
+                    status=401,
+                    authenticated=False,
+                    error="La clave no es correcta.",
+                )
+            entered = RedirectResponse("/", status_code=303)
+            entered.set_cookie(
+                COOKIE_NAME,
+                session_value(token),
+                max_age=COOKIE_MAX_AGE,
+                httponly=True,
+                samesite="lax",
+            )
+            return entered
+
+        @app.post("/salir")
+        def logout():
+            left = RedirectResponse("/entrar", status_code=303)
+            left.delete_cookie(COOKIE_NAME)
+            return left
+
     def render(request: Request, template: str, status: int = 200, **context) -> HTMLResponse:
         return templates.TemplateResponse(
             request,
             template,
-            {"disclaimer": Markup(_markdown.renderInline(DISCLAIMER_ES)), **context},
+            {
+                "disclaimer": Markup(_markdown.renderInline(DISCLAIMER_ES)),
+                # Drives the "Salir" link: there is nothing to leave when the
+                # copilot was never locked.
+                "authenticated": settings.access_token is not None,
+                **context,
+            },
             status_code=status,
         )
 

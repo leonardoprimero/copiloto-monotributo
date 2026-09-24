@@ -10,6 +10,11 @@
   <header class="topbar">
     <a class="brand" href="/">Copiloto de monotributo</a>
     <span class="tagline">La IA lee, el código decide, una persona revisa.</span>
+    {% if authenticated %}
+    <form class="logout" method="post" action="/salir">
+      <button type="submit">Salir</button>
+    </form>
+    {% endif %}
   </header>
 
   <main class="page">

@@ -96,6 +96,38 @@ class TestServe:
         assert Path(db).exists()
 
 
+    def test_it_warns_when_it_listens_off_localhost_without_a_key(
+        self, db, capsys, monkeypatch
+    ) -> None:
+        """Binding to 0.0.0.0 unprotected publishes every case on the network."""
+        monkeypatch.delenv("COPILOTO_TOKEN", raising=False)
+        monkeypatch.setattr("uvicorn.run", lambda app, **kw: None)
+
+        main(["serve", "--host", "0.0.0.0", "--state-db", db])  # noqa: S104
+
+        assert "SIN clave" in capsys.readouterr().err
+
+    def test_localhost_without_a_key_is_not_nagged_about(
+        self, db, capsys, monkeypatch
+    ) -> None:
+        monkeypatch.delenv("COPILOTO_TOKEN", raising=False)
+        monkeypatch.setattr("uvicorn.run", lambda app, **kw: None)
+
+        main(["serve", "--state-db", db])
+
+        assert capsys.readouterr().err == ""
+
+    def test_it_says_when_the_key_is_on(self, db, capsys, monkeypatch) -> None:
+        monkeypatch.setenv("COPILOTO_TOKEN", "una-clave")
+        monkeypatch.setattr("uvicorn.run", lambda app, **kw: None)
+
+        main(["serve", "--host", "0.0.0.0", "--state-db", db])  # noqa: S104
+
+        out = capsys.readouterr()
+        assert "COPILOTO_TOKEN" in out.out
+        assert out.err == ""
+
+
 class TestReviewingLater:
     def test_review_resumes_with_the_verdict_and_prints_the_report(
         self, db, capsys, monkeypatch

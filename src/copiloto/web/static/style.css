@@ -109,3 +109,41 @@ button.link {
 .report ul { padding-left: 20px; }
 
 .disclaimer { max-width: 1080px; margin: 0 auto; padding: 0 20px 32px; color: var(--muted); font-size: 0.88rem; }
+
+/* The login page and the way out of it. */
+.card.narrow {
+  max-width: 26rem;
+  margin: 3rem auto;
+}
+
+.stack {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+}
+
+.stack input[type="password"] {
+  padding: 0.6rem;
+  border: 1px solid var(--line, #d5d2e8);
+  border-radius: 6px;
+  font-size: 1rem;
+}
+
+.topbar .logout {
+  margin-left: auto;
+}
+
+.topbar .logout button {
+  background: none;
+  border: 1px solid currentColor;
+  border-radius: 6px;
+  color: inherit;
+  cursor: pointer;
+  font: inherit;
+  opacity: 0.85;
+  padding: 0.25rem 0.75rem;
+}
+
+.topbar .logout button:hover {
+  opacity: 1;
+}

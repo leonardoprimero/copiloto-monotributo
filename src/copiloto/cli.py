@@ -329,11 +329,24 @@ def _serve(args: argparse.Namespace) -> int:
 
     from copiloto.web.app import WebSettings, create_app  # noqa: PLC0415
 
-    settings = WebSettings(state_db=Path(args.state_db), extractor_mode=args.extractor)
+    token = os.environ.get("COPILOTO_TOKEN") or None
+    settings = WebSettings(
+        state_db=Path(args.state_db), extractor_mode=args.extractor, access_token=token
+    )
     print(f"Copiloto de monotributo en http://{args.host}:{args.port}")
     print(f"Casos guardados en {args.state_db}. Lector de facturas: {args.extractor}.")
     if args.extractor == "fake":
         print("En modo fake solo corren los ejemplos; para facturas reales usá --extractor cli o api.")
+    if token:
+        print("Protegido con la clave de COPILOTO_TOKEN.")
+    elif args.host not in ("127.0.0.1", "localhost", "::1"):
+        # Binding to anything else publishes every case on the network, and a
+        # case page is somebody's income. Say it where it cannot be missed.
+        print(
+            f"⚠  Escuchando en {args.host} SIN clave: cualquiera que llegue al puerto "
+            "puede leer todos los casos. Definí COPILOTO_TOKEN para protegerlo.",
+            file=sys.stderr,
+        )
     uvicorn.run(create_app(settings), host=args.host, port=args.port, log_level="warning")
     return 0
 

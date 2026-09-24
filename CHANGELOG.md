@@ -15,6 +15,10 @@ tres cosas que los manuales no muestran.
   `loginCmsReturn`, no como elementos, así que el cliente fallaba *después* de
   que ARCA lo emitía. Un reintento habría quedado bloqueado doce horas con
   `coe.alreadyAuthenticated`.
+- **Si el ticket no se puede guardar en disco, no se pierde.** Un error al
+  escribir la caché (permisos, disco lleno) avisa con un `RuntimeWarning` y
+  devuelve el ticket igual; antes la excepción lo tiraba a la basura recién
+  emitido, con el mismo bloqueo de doce horas. Lo detectó la revisión de código.
 - **Una constancia bloqueada ya no se confunde con "no es monotributista".** Una
   CUIT cancelada, o bloqueada por falta de datos biométricos, lanza
   `ConstanciaUnavailable` con los motivos textuales de ARCA en vez de devolver

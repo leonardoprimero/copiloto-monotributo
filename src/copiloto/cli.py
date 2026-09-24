@@ -11,24 +11,27 @@ asks for a verdict, and resumes the run with the answer.
 import argparse
 import os
 import sys
+from collections.abc import Callable
 from datetime import date
 from decimal import Decimal
+from pathlib import Path
 
 from langchain_core.runnables import RunnableConfig
 from langgraph.types import Command
 
 from copiloto.analysis import RiskPolicy
-from copiloto.evals.runner import ExtractorFactory
+from copiloto.cuit import is_valid_cuit
 from copiloto.evals.schema import EvalCase
 from copiloto.extractors.api import ApiExtractor
 from copiloto.extractors.cli import CliExtractor, run_subprocess
 from copiloto.extractors.fake import FakeExtractor
-from copiloto.extractors.protocol import ExtractionError
+from copiloto.extractors.protocol import ExtractionError, InvoiceExtractor
 from copiloto.extractors.resolve import resolve_cli_argv
 from copiloto.graph.builder import build_graph
 from copiloto.models import ExtractedInvoice, TaxpayerProfile
 from copiloto.registry import MockArcaRegistry
-from copiloto.scales import load_scales
+from copiloto.scales import Scales, load_scales
+from copiloto.sources import SourceError, load_invoice_texts
 
 _RISK_LABELS = {
     "low": "bajo",
@@ -50,18 +53,33 @@ _REASONS = {
 _VERDICTS = {"confirmado": "confirmed", "descartado": "dismissed"}
 
 
-def build_extractor_factory(mode: str) -> ExtractorFactory:
-    """Build the extractor factory for the requested mode."""
-    if mode == "fake":
-        return lambda case: FakeExtractor(
-            dict(
-                zip(
-                    case.invoice_texts,
-                    [ExtractedInvoice.model_validate(i) for i in case.invoices],
-                    strict=True,
-                )
+def _fake_for(case: EvalCase | None) -> FakeExtractor:
+    if case is None:
+        # Guarded by the argument checks; kept so the failure is explicit
+        # rather than an AttributeError deep inside a node.
+        raise ExtractionError(
+            "El extractor `fake` solo funciona con --case: no puede leer facturas reales."
+        )
+    return FakeExtractor(
+        dict(
+            zip(
+                case.invoice_texts,
+                [ExtractedInvoice.model_validate(i) for i in case.invoices],
+                strict=True,
             )
         )
+    )
+
+
+def build_extractor_factory(mode: str) -> Callable[[EvalCase | None], InvoiceExtractor]:
+    """Build the extractor factory for the requested mode.
+
+    The `cli` and `api` extractors ignore the case entirely: they read whatever
+    text they are handed, which is what lets the same graph run on eval cases
+    and on a folder of real invoices.
+    """
+    if mode == "fake":
+        return _fake_for
     if mode == "cli":
         argv = resolve_cli_argv(env=dict(os.environ))
         return lambda _case: CliExtractor(run=run_subprocess, argv=argv)
@@ -78,6 +96,18 @@ def _registry(case: EvalCase) -> MockArcaRegistry:
                 cuit=entry.cuit, name=entry.name, category=entry.category
             )
         }
+    )
+
+
+def _declared_registry(cuit: str, category: str) -> MockArcaRegistry:
+    """Build a registry from what the taxpayer says about themselves.
+
+    The only thing an ARCA lookup would provide is the registered category, and
+    the taxpayer already knows that letter. Asking for it keeps the project
+    away from anyone's fiscal credentials without losing anything.
+    """
+    return MockArcaRegistry(
+        {cuit: TaxpayerProfile(cuit=cuit, name="Contribuyente declarado", category=category)}
     )
 
 
@@ -123,14 +153,67 @@ def _ask_accountant() -> dict:
     return {"verdict": verdict, "notes": notes, "reviewer": "accountant"}
 
 
-def _run_case(args: argparse.Namespace) -> int:
-    try:
-        case = EvalCase.model_validate_json(
-            open(args.case, encoding="utf-8").read()  # noqa: SIM115
+def _validate_own_invoice_args(args: argparse.Namespace, scales: Scales) -> str | None:
+    """Check the flags that only make sense with a folder of real invoices.
+
+    Every problem here is caught before a single document is read, so a typo in
+    a CUIT does not come back as twelve identical complaints about invoices.
+    """
+    if not args.cuit:
+        return "Con --invoices-dir necesito --cuit: el CUIT del contribuyente."
+    if not is_valid_cuit(args.cuit):
+        return f"El CUIT {args.cuit} no pasa el dígito verificador."
+    if not args.category:
+        return (
+            "Con --invoices-dir necesito --category: la categoría en la que estás "
+            "registrado. La tenés en tu credencial o en el pago mensual."
         )
-    except OSError as error:
-        print(f"No pude leer el caso: {error}", file=sys.stderr)
-        return 1
+
+    names = [c.name for c in scales.categories]
+    if args.category not in names:
+        return f"La categoría {args.category} no existe. Son: {', '.join(names)}."
+
+    if args.extractor == "fake":
+        return (
+            "El extractor `fake` solo conoce los textos de los casos de eval y no "
+            "puede leer una factura real. Usá --extractor cli o --extractor api."
+        )
+    return None
+
+
+def _run(args: argparse.Namespace) -> int:
+    scales = load_scales()
+
+    if args.invoices_dir:
+        problem = _validate_own_invoice_args(args, scales)
+        if problem:
+            print(problem, file=sys.stderr)
+            return 2
+        try:
+            raw_invoices = load_invoice_texts(Path(args.invoices_dir))
+        except SourceError as error:
+            print(str(error), file=sys.stderr)
+            return 1
+
+        case = None
+        taxpayer_cuit = args.cuit
+        registry = _declared_registry(args.cuit, args.category)
+        thread = f"cli-{Path(args.invoices_dir).name}"
+        default_today = date.today()
+    else:
+        try:
+            case = EvalCase.model_validate_json(
+                Path(args.case).read_text(encoding="utf-8")
+            )
+        except OSError as error:
+            print(f"No pude leer el caso: {error}", file=sys.stderr)
+            return 1
+
+        raw_invoices = case.invoice_texts
+        taxpayer_cuit = case.taxpayer_cuit
+        registry = _registry(case)
+        thread = f"cli-{case.id}"
+        default_today = date.fromisoformat(case.today)
 
     try:
         factory = build_extractor_factory(args.extractor)
@@ -138,18 +221,18 @@ def _run_case(args: argparse.Namespace) -> int:
         print(f"No pude preparar el lector de facturas:\n{error}", file=sys.stderr)
         return 1
 
-    today = date.fromisoformat(args.today) if args.today else date.fromisoformat(case.today)
+    today = date.fromisoformat(args.today) if args.today else default_today
     graph = build_graph(
         extractor=factory(case),
-        registry=_registry(case),
-        scales=load_scales(),
+        registry=registry,
+        scales=scales,
         today=today,
         policy=RiskPolicy(),
     )
-    config: RunnableConfig = {"configurable": {"thread_id": f"cli-{case.id}"}}
+    config: RunnableConfig = {"configurable": {"thread_id": thread}}
 
     state = graph.invoke(
-        {"taxpayer_cuit": case.taxpayer_cuit, "raw_invoices": case.invoice_texts}, config
+        {"taxpayer_cuit": taxpayer_cuit, "raw_invoices": raw_invoices}, config
     )
 
     if "__interrupt__" in state:
@@ -179,8 +262,20 @@ def main(argv: list[str] | None = None) -> int:
     )
     sub = parser.add_subparsers(dest="command", required=True)
 
-    run = sub.add_parser("run", help="Analizar un caso sintético.")
-    run.add_argument("--case", required=True, help="Ruta a un caso de evals/cases.")
+    run = sub.add_parser("run", help="Analizar facturas y armar el informe.")
+
+    source = run.add_mutually_exclusive_group(required=True)
+    source.add_argument("--case", help="Ruta a un caso sintético de evals/cases.")
+    source.add_argument(
+        "--invoices-dir",
+        help="Carpeta con tus facturas (.txt o .pdf). Requiere --cuit y --category.",
+    )
+
+    run.add_argument("--cuit", help="Tu CUIT. Solo con --invoices-dir.")
+    run.add_argument(
+        "--category",
+        help="La categoría en la que estás registrado (A a K). Solo con --invoices-dir.",
+    )
     run.add_argument(
         "--extractor",
         choices=("fake", "cli", "api"),
@@ -195,7 +290,7 @@ def main(argv: list[str] | None = None) -> int:
     )
 
     args = parser.parse_args(argv)
-    return _run_case(args)
+    return _run(args)
 
 
 if __name__ == "__main__":

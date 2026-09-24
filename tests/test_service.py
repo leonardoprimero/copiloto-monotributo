@@ -15,7 +15,13 @@ import pytest
 from copiloto.analysis import RiskPolicy
 from copiloto.extractors.fake import FakeExtractor
 from copiloto.graph.checkpoints import open_checkpointer
-from copiloto.models import DeclaredParameters, ExtractedInvoice, HumanDecision, InvoiceItem
+from copiloto.models import (
+    DeclaredParameters,
+    ExtractedInvoice,
+    HumanDecision,
+    InvoiceItem,
+    Issue,
+)
 from copiloto.registry import default_registry
 from copiloto.scales import load_scales
 from copiloto.service import (
@@ -58,7 +64,7 @@ def copilot(db: Path | None = None) -> Copilot:
     )
 
 
-def start(service: Copilot, case_id: str, mapping: dict, declared=None):
+def start(service: Copilot, case_id: str, mapping: dict, declared=None, source_issues=()):
     return service.start(
         case_id=case_id,
         taxpayer_cuit=CUIT,
@@ -67,7 +73,47 @@ def start(service: Copilot, case_id: str, mapping: dict, declared=None):
         registry=default_registry(),
         today=TODAY,
         declared=declared,
+        source_issues=source_issues,
     )
+
+
+class TestSourceIssues:
+    """Doubt about how the invoices were *read* travels with the case."""
+
+    def test_a_source_warning_sends_a_calm_case_to_an_accountant(self) -> None:
+        """OCR can misread a total, so even a low-risk case needs a person."""
+        warning = Issue(code="OCR_USED", severity="warning", message="Leída con OCR: b.pdf")
+
+        outcome = start(copilot(), "scanned", CALM, source_issues=(warning,))
+
+        assert isinstance(outcome, PendingReview)
+        assert [i["code"] for i in outcome.alert["issues"]] == ["OCR_USED"]
+
+    def test_without_source_issues_the_same_case_closes_on_its_own(self) -> None:
+        assert isinstance(start(copilot(), "clean", CALM), Finished)
+
+    def test_the_warning_does_not_displace_the_issues_the_nodes_find(self) -> None:
+        """The channel appends; seeding it must not overwrite what the nodes add."""
+        warning = Issue(code="OCR_USED", severity="warning", message="Leída con OCR: b.pdf")
+
+        outcome = start(copilot(), "both", CHANGE, source_issues=(warning,))
+
+        assert isinstance(outcome, PendingReview)
+        assert "OCR_USED" in [i["code"] for i in outcome.alert["issues"]]
+        assert outcome.alert["reasons"], "the analysis reasons must survive"
+
+    def test_the_report_of_a_scanned_case_names_the_doubt(self) -> None:
+        """The accountant reads the report, so the report must carry the warning."""
+        warning = Issue(code="OCR_USED", severity="warning", message="Leída con OCR: b.pdf")
+        service = copilot()
+        start(service, "scanned-report", CALM, source_issues=(warning,))
+
+        finished = service.resume(
+            "scanned-report",
+            HumanDecision(verdict="confirmed", notes="Coteje.", reviewer="accountant"),
+        )
+
+        assert "OCR" in finished.report
 
 
 class TestStarting:

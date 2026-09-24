@@ -20,7 +20,7 @@ from langgraph.types import Command, StateSnapshot
 from copiloto.analysis import RiskPolicy
 from copiloto.extractors.protocol import ExtractionError, InvoiceExtractor
 from copiloto.graph.builder import build_graph
-from copiloto.models import DeclaredParameters, ExtractedInvoice, HumanDecision
+from copiloto.models import DeclaredParameters, ExtractedInvoice, HumanDecision, Issue
 from copiloto.registry import TaxpayerRegistry, UnavailableRegistry
 from copiloto.scales import Scales
 
@@ -101,8 +101,15 @@ class Copilot:
         registry: TaxpayerRegistry,
         today: date,
         declared: DeclaredParameters | None = None,
+        source_issues: tuple[Issue, ...] = (),
     ) -> PendingReview | Finished:
-        """Run a new case up to its report or its pause."""
+        """Run a new case up to its report or its pause.
+
+        `source_issues` are doubts about how the invoices were *read* rather
+        than what they say — OCR, above all. They are seeded into the `issues`
+        channel, which appends, so the nodes still add their own, and a
+        warning routes the case to an accountant like any other.
+        """
         if self._snapshot(case_id).values:
             raise CaseAlreadyExists(f"Case {case_id!r} already exists.")
 
@@ -115,7 +122,12 @@ class Copilot:
             checkpointer=self._checkpointer,
         )
         graph.invoke(
-            {"taxpayer_cuit": taxpayer_cuit, "raw_invoices": raw_invoices, "declared": declared},
+            {
+                "taxpayer_cuit": taxpayer_cuit,
+                "raw_invoices": raw_invoices,
+                "declared": declared,
+                "issues": list(source_issues),
+            },
             self._config(case_id),
         )
         outcome = self.get(case_id)

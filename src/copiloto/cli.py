@@ -25,10 +25,11 @@ from copiloto.extractors.protocol import ExtractionError
 from copiloto.extractors.select import build_extractor_factory
 from copiloto.graph.checkpoints import open_checkpointer
 from copiloto.models import DeclaredParameters, HumanDecision, TaxpayerProfile, Verdict
+from copiloto.ocr import default_ocr
 from copiloto.registry import MockArcaRegistry
 from copiloto.scales import Scales, load_scales
 from copiloto.service import CaseAlreadyExists, Copilot, PendingReview
-from copiloto.sources import SourceError, load_invoice_texts
+from copiloto.sources import SourceError, load_invoice_sources, ocr_issue
 
 _RISK_LABELS = {
     "low": "bajo",
@@ -207,11 +208,14 @@ def _run(args: argparse.Namespace) -> int:
             print(problem, file=sys.stderr)
             return 2
         try:
-            raw_invoices = load_invoice_texts(Path(args.invoices_dir))
+            sources = load_invoice_sources(Path(args.invoices_dir), ocr=default_ocr())
         except SourceError as error:
             print(str(error), file=sys.stderr)
             return 1
 
+        raw_invoices = tuple(s.text for s in sources)
+        scanned = ocr_issue(sources)
+        source_issues = (scanned,) if scanned else ()
         case = None
         taxpayer_cuit = args.cuit
         registry = _declared_registry(args.cuit, args.category)
@@ -227,6 +231,7 @@ def _run(args: argparse.Namespace) -> int:
             return 1
 
         raw_invoices = case.invoice_texts
+        source_issues = ()
         taxpayer_cuit = case.taxpayer_cuit
         registry = _registry(case)
         thread = f"cli-{case.id}"
@@ -251,6 +256,7 @@ def _run(args: argparse.Namespace) -> int:
             registry=registry,
             today=today,
             declared=declared,
+            source_issues=source_issues,
         )
     except CaseAlreadyExists:
         print(f"Ya existe un caso {case_id}. Elegí otro --case-id.", file=sys.stderr)

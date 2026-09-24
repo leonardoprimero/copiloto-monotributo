@@ -313,3 +313,93 @@ def _mapping_factory(folder: Path):
         )
 
     return lambda _mode: (lambda _case: FakeExtractor(mapping))
+
+
+class TestScannedInvoices:
+    """A scanned invoice is readable, but its numbers are a guess."""
+
+    def test_a_scan_is_read_with_ocr_and_the_case_goes_to_a_person(
+        self, tmp_path: Path, capsys, monkeypatch
+    ) -> None:
+        text = TEXT.format(n=1, m=7)
+        (tmp_path / "escaneada.pdf").write_bytes(b"%PDF-1.4 fake")
+        monkeypatch.setattr("copiloto.sources.read_pdf_text", lambda _p: "")
+        monkeypatch.setattr("copiloto.cli.default_ocr", lambda: (lambda _p: text))
+        monkeypatch.setattr(
+            "copiloto.cli.build_extractor_factory", _factory_for({text: 7})
+        )
+
+        code = main(
+            [
+                "run",
+                "--invoices-dir",
+                str(tmp_path),
+                "--cuit",
+                "20-11111111-2",
+                "--category",
+                "A",
+                "--today",
+                "2026-09-24",
+                "--extractor",
+                "cli",
+                "--auto-resume",
+            ]
+        )
+        out = capsys.readouterr().out
+
+        assert code == 0
+        assert "escaneada.pdf" in out
+        assert "OCR" in out
+
+    def test_without_ocr_the_scan_is_refused_instead_of_skipped(
+        self, tmp_path: Path, capsys, monkeypatch
+    ) -> None:
+        """Dropping it would understate the income. Better to stop."""
+        (tmp_path / "escaneada.pdf").write_bytes(b"%PDF-1.4 fake")
+        monkeypatch.setattr("copiloto.sources.read_pdf_text", lambda _p: "")
+        monkeypatch.setattr("copiloto.cli.default_ocr", lambda: None)
+
+        code = main(
+            [
+                "run",
+                "--invoices-dir",
+                str(tmp_path),
+                "--cuit",
+                "20-11111111-2",
+                "--category",
+                "A",
+                "--extractor",
+                "cli",
+            ]
+        )
+
+        assert code == 1
+        assert "escaneada.pdf" in capsys.readouterr().err
+
+
+def _factory_for(text_to_month: dict[str, int]):
+    """An offline extractor for exactly the given texts."""
+    from datetime import date
+    from decimal import Decimal
+
+    from copiloto.extractors.fake import FakeExtractor
+    from copiloto.models import ExtractedInvoice, InvoiceItem
+
+    amount = Decimal("800000.00")
+    mapping = {}
+    for i, (text, month) in enumerate(text_to_month.items(), start=1):
+        item = InvoiceItem(
+            description="Consultoria",
+            quantity=Decimal("1"),
+            unit_price=amount,
+            total=amount,
+            kind="service",
+        )
+        mapping[text] = ExtractedInvoice(
+            number=f"0001-{i:08d}",
+            issuer_cuit="20-11111111-2",
+            issue_date=date(2026, month, 15),
+            items=(item,),
+            total=amount,
+        )
+    return lambda _mode: (lambda _case: FakeExtractor(mapping))

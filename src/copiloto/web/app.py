@@ -38,7 +38,8 @@ from copiloto.registry import MockArcaRegistry
 from copiloto.report import DISCLAIMER_ES, REASON_LABELS, RISK_LABELS, format_money
 from copiloto.scales import load_scales
 from copiloto.service import CaseSummary, Copilot, Finished, PendingReview
-from copiloto.sources import SourceError, load_invoice_texts
+from copiloto.ocr import default_ocr
+from copiloto.sources import InvoiceSource, SourceError, load_invoice_sources, ocr_issue
 
 ROOT = Path(__file__).resolve().parents[3]
 CASES_DIR = ROOT / "evals" / "cases"
@@ -63,6 +64,10 @@ class WebSettings:
     read uploads with a fake. Otherwise the factory is built from the mode on
     each upload, so a missing tool or key becomes a message on the form rather
     than a crash at startup.
+
+    `ocr` reads scanned PDFs. It defaults to whatever this machine can do:
+    the real engine when the extra and tesseract are installed, and None
+    otherwise, which makes a scan a clear error instead of a dropped invoice.
     """
 
     state_db: Path | None = None
@@ -71,6 +76,7 @@ class WebSettings:
     clock: Callable[[], date] = date.today
     cases_dir: Path = CASES_DIR
     policy: RiskPolicy = field(default_factory=RiskPolicy)
+    ocr: Callable[[Path], str] | None = field(default_factory=default_ocr)
 
 
 class FormError(ValueError):
@@ -212,7 +218,7 @@ def create_app(settings: WebSettings) -> FastAPI:
         except ExtractionError as error:
             raise FormError(f"No pude preparar el lector de facturas: {error}") from error
 
-    def read_uploads(uploads: list[UploadFile]) -> tuple[str, ...]:
+    def read_uploads(uploads: list[UploadFile]) -> tuple[InvoiceSource, ...]:
         uploads = [u for u in uploads if u.filename]
         if not uploads:
             raise FormError("Subí al menos una factura en .txt o .pdf.")
@@ -221,7 +227,7 @@ def create_app(settings: WebSettings) -> FastAPI:
                 name = Path(upload.filename or "factura").name
                 (Path(folder) / f"{index:04d}-{name}").write_bytes(upload.file.read())
             try:
-                return load_invoice_texts(Path(folder))
+                return load_invoice_sources(Path(folder), ocr=settings.ocr)
             except SourceError as error:
                 raise FormError(str(error)) from error
 
@@ -256,15 +262,17 @@ def create_app(settings: WebSettings) -> FastAPI:
                 )
             declared = parse_declared(surface_m2, energy_kwh, annual_rent)
             extractor = extractor_for_uploads()
-            raw_invoices = read_uploads(invoices)
+            sources = read_uploads(invoices)
         except FormError as error:
             return home(request, status=400, error=str(error), form=form)
 
+        scanned = ocr_issue(sources)
         case_id = uuid4().hex[:12]
         service.start(
             case_id=case_id,
             taxpayer_cuit=cuit,
-            raw_invoices=raw_invoices,
+            raw_invoices=tuple(s.text for s in sources),
+            source_issues=(scanned,) if scanned else (),
             extractor=extractor,
             registry=declared_registry(cuit, category),
             today=settings.clock(),

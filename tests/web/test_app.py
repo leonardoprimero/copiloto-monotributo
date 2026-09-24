@@ -49,7 +49,7 @@ def mapping_for(texts: list[str]) -> dict[str, ExtractedInvoice]:
             items=(item,),
             total=amount,
         )
-        for i, (text, month) in enumerate(zip(texts, [7, 8, 9], strict=True), start=1)
+        for i, (text, month) in enumerate(zip(texts, [7, 8, 9][: len(texts)], strict=True), start=1)
     }
 
 
@@ -257,3 +257,44 @@ class TestCases:
         page = second.post(f"{pending.url}/revision", data={"verdict": "confirmado"})
 
         assert "Revisado por un contador" in page.text
+
+
+class TestScannedUploads:
+    """A scanned PDF is read when the machine can, and refused when it cannot."""
+
+    def _client(self, text: str, ocr, monkeypatch) -> TestClient:
+        monkeypatch.setattr("copiloto.sources.read_pdf_text", lambda _p: "")
+        settings = WebSettings(
+            state_db=None,
+            extractor_mode="cli",
+            extractor_factory=lambda _case: FakeExtractor(mapping_for([text])),
+            clock=lambda: TODAY,
+            ocr=ocr,
+        )
+        return TestClient(create_app(settings), follow_redirects=True)
+
+    def test_a_scan_is_read_with_ocr_and_waits_for_a_person(self, monkeypatch) -> None:
+        text = rendered_texts()[0]
+        client = self._client(text, lambda _p: text, monkeypatch)
+
+        page = client.post(
+            "/casos",
+            data={"cuit": "20-11111111-2", "category": "A"},
+            files=[("invoices", ("escaneada.pdf", b"%PDF-1.4 fake", "application/pdf"))],
+        )
+
+        assert page.status_code == 200
+        assert "OCR" in page.text
+        assert "escaneada.pdf" in page.text
+
+    def test_without_ocr_the_form_says_so_instead_of_dropping_it(self, monkeypatch) -> None:
+        client = self._client(rendered_texts()[0], None, monkeypatch)
+
+        page = client.post(
+            "/casos",
+            data={"cuit": "20-11111111-2", "category": "A"},
+            files=[("invoices", ("escaneada.pdf", b"%PDF-1.4 fake", "application/pdf"))],
+        )
+
+        assert page.status_code == 400
+        assert "escaneada.pdf" in page.text

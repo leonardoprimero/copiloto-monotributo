@@ -30,7 +30,7 @@ RequestTicket = Callable[[datetime], AccessTicket]
 CallPadron = Callable[[str, str, str], str]
 
 
-def _utc_now() -> datetime:
+def utc_now() -> datetime:
     return datetime.now(UTC)
 
 
@@ -43,7 +43,7 @@ class ArcaRegistry:
         represented_cuit: str,
         request_ticket: RequestTicket,
         call_padron: CallPadron,
-        clock: Callable[[], datetime] = _utc_now,
+        clock: Callable[[], datetime] = utc_now,
     ) -> None:
         if not is_valid_cuit(represented_cuit):
             raise ValueError(

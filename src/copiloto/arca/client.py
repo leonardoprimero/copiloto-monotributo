@@ -14,7 +14,7 @@ from datetime import datetime
 from pathlib import Path
 
 from copiloto.arca.padron import PadronError
-from copiloto.arca.registry import ArcaRegistry
+from copiloto.arca.registry import ArcaRegistry, utc_now
 from copiloto.arca.signing import signer_from_files
 from copiloto.arca.soap import (
     ENDPOINTS,
@@ -53,6 +53,7 @@ def build_registry(
     environment: str = PRODUCCION,
     passphrase: bytes | None = None,
     post: Post = _default_post,
+    clock: Callable[[], datetime] = utc_now,
 ) -> ArcaRegistry:
     """A registry that looks taxpayers up in ARCA, using your certificate.
 
@@ -67,7 +68,7 @@ def build_registry(
         return request_ticket(
             SERVICE,
             sign_cms=sign_cms,
-            send=lambda url, cms: post(url, _login_envelope(cms)),
+            send=post,
             now=now,
             environment=environment,
         )
@@ -88,21 +89,6 @@ def build_registry(
         represented_cuit=represented_cuit,
         request_ticket=get_ticket,
         call_padron=call_padron,
+        clock=clock,
     )
 
-
-def _login_envelope(cms: str) -> str:
-    """The `loginCms` call.
-
-    The namespace is the one the WSAA WSDL declares for the element, which is
-    not the service's own target namespace. Getting it wrong is a silent way
-    to be misunderstood.
-    """
-    from xml.sax.saxutils import escape  # noqa: PLC0415
-
-    return (
-        '<soapenv:Envelope xmlns:soapenv="http://schemas.xmlsoap.org/soap/envelope/" '
-        'xmlns:wsaa="http://wsaa.view.sua.dvadac.desein.afip.gov">'
-        f"<soapenv:Header/><soapenv:Body><wsaa:loginCms><in0>{escape(cms)}</in0>"
-        "</wsaa:loginCms></soapenv:Body></soapenv:Envelope>"
-    )

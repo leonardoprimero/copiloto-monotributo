@@ -20,8 +20,15 @@ from copiloto.arca.wsaa import (
     AccessTicket,
     WsaaError,
     build_tra,
+    parse_login_response,
     parse_ticket,
     request_ticket,
+)
+from tests.arca.recorded import (
+    LOGIN_CMS_RESPONSE,
+    LOGIN_EXPIRES,
+    LOGIN_SIGN,
+    LOGIN_TOKEN,
 )
 
 # The example response from the technical specification, section "Extracción y
@@ -118,6 +125,36 @@ class TestParseTicket:
             parse_ticket("no soy xml")
 
 
+class TestParseLoginResponse:
+    """What WSAA actually sends, recorded from homologación.
+
+    The ticket does not arrive as XML elements. It arrives as the escaped text
+    of `loginCmsReturn`, a document inside a string inside an envelope.
+    Reading it as elements finds nothing, and by then ARCA has already issued
+    a ticket it will not issue again for twelve hours.
+    """
+
+    def test_it_reads_the_credentials_out_of_the_envelope(self) -> None:
+        ticket = parse_login_response(LOGIN_CMS_RESPONSE)
+
+        assert (ticket.token, ticket.sign) == (LOGIN_TOKEN, LOGIN_SIGN)
+
+    def test_it_reads_when_the_ticket_expires(self) -> None:
+        ticket = parse_login_response(LOGIN_CMS_RESPONSE)
+
+        assert ticket.expires_at == datetime.fromisoformat(LOGIN_EXPIRES)
+
+    def test_an_envelope_without_a_login_return_is_an_error(self) -> None:
+        envelope = LOGIN_CMS_RESPONSE.replace("loginCmsReturn", "otraCosa")
+
+        with pytest.raises(WsaaError, match="loginCmsReturn"):
+            parse_login_response(envelope)
+
+    def test_something_that_is_not_xml_is_an_error(self) -> None:
+        with pytest.raises(WsaaError):
+            parse_login_response("no soy xml")
+
+
 class TestAccessTicketExpiry:
     def _ticket(self, expires_at: datetime) -> AccessTicket:
         return AccessTicket(token="un-token", sign="una-firma", expires_at=expires_at)  # noqa: S106
@@ -140,11 +177,11 @@ class TestRequestTicket:
         ticket = request_ticket(
             "ws_sr_constancia_inscripcion",
             sign_cms=lambda tra: f"firmado:{tra}",
-            send=lambda _url, _cms: TA_XML,
+            send=lambda _url, _cms: LOGIN_CMS_RESPONSE,
             now=NOW,
         )
 
-        assert ticket.token.startswith("cES0SSuWIIPlfe5")
+        assert ticket.token == LOGIN_TOKEN
 
     def test_what_gets_signed_is_the_request_that_was_built(self) -> None:
         signed: list[str] = []
@@ -152,7 +189,7 @@ class TestRequestTicket:
         request_ticket(
             "ws_sr_constancia_inscripcion",
             sign_cms=lambda tra: signed.append(tra) or "cms",
-            send=lambda _url, _cms: TA_XML,
+            send=lambda _url, _cms: LOGIN_CMS_RESPONSE,
             now=NOW,
         )
 
@@ -164,12 +201,32 @@ class TestRequestTicket:
         request_ticket(
             "ws_sr_constancia_inscripcion",
             sign_cms=lambda _tra: "el-cms-firmado",
-            send=lambda url, cms: sent.append((url, cms)) or TA_XML,
+            send=lambda url, body: sent.append((url, body)) or LOGIN_CMS_RESPONSE,
             now=NOW,
             environment=PRODUCCION,
         )
 
-        assert sent == [("https://wsaa.afip.gov.ar/ws/services/LoginCms", "el-cms-firmado")]
+        [(url, body)] = sent
+        assert url == "https://wsaa.afip.gov.ar/ws/services/LoginCms"
+        assert "<in0>el-cms-firmado</in0>" in body
+
+    def test_the_signed_message_travels_in_the_login_cms_element(self) -> None:
+        """The WSDL puts `loginCms` in its own namespace, not the service's."""
+        sent: list[str] = []
+
+        request_ticket(
+            "ws_sr_constancia_inscripcion",
+            sign_cms=lambda _tra: "cms",
+            send=lambda _url, body: sent.append(body) or LOGIN_CMS_RESPONSE,
+            now=NOW,
+        )
+
+        from defusedxml import ElementTree
+
+        call = ElementTree.fromstring(sent[0]).find(
+            ".//{http://wsaa.view.sua.dvadac.desein.afip.gov}loginCms/in0"
+        )
+        assert call is not None and call.text == "cms"
 
     def test_the_testing_environment_has_its_own_endpoint(self) -> None:
         sent: list[str] = []
@@ -177,7 +234,7 @@ class TestRequestTicket:
         request_ticket(
             "ws_sr_constancia_inscripcion",
             sign_cms=lambda _tra: "cms",
-            send=lambda url, _cms: sent.append(url) or TA_XML,
+            send=lambda url, _cms: sent.append(url) or LOGIN_CMS_RESPONSE,
             now=NOW,
             environment=HOMOLOGACION,
         )

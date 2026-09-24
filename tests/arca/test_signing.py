@@ -13,17 +13,16 @@ can be checked without being a registered CEE.
 import shutil
 import subprocess
 from base64 import b64decode
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, datetime
 from pathlib import Path
 
 import pytest
 from cryptography import x509
-from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.asymmetric import rsa
-from cryptography.x509.oid import NameOID
 
 from copiloto.arca.signing import SigningError, sign_tra, signer_from_files
 from copiloto.arca.wsaa import build_tra
+from tests.arca.certificates import write_self_signed
 
 NOW = datetime(2026, 9, 24, 10, 0, tzinfo=UTC)
 openssl_available = pytest.mark.skipif(
@@ -34,37 +33,7 @@ openssl_available = pytest.mark.skipif(
 @pytest.fixture
 def credentials(tmp_path: Path) -> tuple[Path, Path]:
     """A self-signed certificate shaped like the ones ARCA issues."""
-    key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
-    name = x509.Name(
-        [
-            x509.NameAttribute(NameOID.COUNTRY_NAME, "AR"),
-            x509.NameAttribute(NameOID.ORGANIZATION_NAME, "Prueba"),
-            x509.NameAttribute(NameOID.COMMON_NAME, "copiloto"),
-            x509.NameAttribute(NameOID.SERIAL_NUMBER, "CUIT 20111111112"),
-        ]
-    )
-    certificate = (
-        x509.CertificateBuilder()
-        .subject_name(name)
-        .issuer_name(name)
-        .public_key(key.public_key())
-        .serial_number(x509.random_serial_number())
-        .not_valid_before(datetime.now(UTC) - timedelta(days=1))
-        .not_valid_after(datetime.now(UTC) + timedelta(days=1))
-        .sign(key, hashes.SHA256())
-    )
-
-    cert_path = tmp_path / "cert.pem"
-    key_path = tmp_path / "key.pem"
-    cert_path.write_bytes(certificate.public_bytes(serialization.Encoding.PEM))
-    key_path.write_bytes(
-        key.private_bytes(
-            encoding=serialization.Encoding.PEM,
-            format=serialization.PrivateFormat.TraditionalOpenSSL,
-            encryption_algorithm=serialization.NoEncryption(),
-        )
-    )
-    return cert_path, key_path
+    return write_self_signed(tmp_path)
 
 
 @pytest.fixture

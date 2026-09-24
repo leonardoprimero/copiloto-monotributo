@@ -27,6 +27,7 @@ import secrets
 from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import datetime, timedelta
+from xml.sax.saxutils import escape
 
 from defusedxml import ElementTree
 
@@ -52,6 +53,11 @@ _VALID_FOR = timedelta(hours=10)
 # A ticket about to expire will expire mid-request. Treat the last minute of
 # its life as already gone.
 _EXPIRY_MARGIN = timedelta(minutes=1)
+
+# The namespace the WSAA WSDL declares for the `loginCms` element, which is
+# not the service's own target namespace. Getting it wrong is a silent way to
+# be misunderstood.
+_LOGIN_NAMESPACE = "http://wsaa.view.sua.dvadac.desein.afip.gov"
 
 SignCms = Callable[[str], str]
 Send = Callable[[str, str], str]
@@ -100,6 +106,36 @@ def build_tra(
     )
 
 
+def build_login_envelope(cms: str) -> str:
+    """The `loginCms` SOAP call carrying one signed request."""
+    return (
+        '<soapenv:Envelope xmlns:soapenv="http://schemas.xmlsoap.org/soap/envelope/" '
+        f'xmlns:wsaa="{_LOGIN_NAMESPACE}">'
+        f"<soapenv:Header/><soapenv:Body><wsaa:loginCms><in0>{escape(cms)}</in0>"
+        "</wsaa:loginCms></soapenv:Body></soapenv:Envelope>"
+    )
+
+
+def parse_login_response(envelope_xml: str) -> AccessTicket:
+    """Read the ticket out of what `loginCms` actually answers.
+
+    The specification describes `LoginTicketResponse.xml` and its example is
+    that bare document. On the wire it arrives as the escaped text of
+    `loginCmsReturn`: a document inside a string inside an envelope. Reading
+    it as elements finds nothing, and by then ARCA has already issued a ticket
+    it will not issue again until this one expires.
+    """
+    try:
+        root = ElementTree.fromstring(envelope_xml)
+    except Exception as error:
+        raise WsaaError(f"WSAA answered something that is not XML: {error}") from error
+
+    found = root.find(f".//{{{_LOGIN_NAMESPACE}}}loginCmsReturn")
+    if found is None or not found.text:
+        raise WsaaError("The WSAA response has no loginCmsReturn to read the ticket from.")
+    return parse_ticket(found.text)
+
+
 def parse_ticket(response_xml: str) -> AccessTicket:
     """Read the credentials out of a `LoginTicketResponse.xml`."""
     try:
@@ -130,12 +166,13 @@ def request_ticket(
 ) -> AccessTicket:
     """Build, sign, send and read back one access ticket.
 
-    `sign_cms` turns the request into a base64 CMS message and `send` posts it,
-    so this function stays pure enough to test without a certificate.
+    `sign_cms` turns the request into a base64 CMS message and `send` posts an
+    envelope and returns the raw answer, so this function stays pure enough to
+    test without a certificate or a socket.
     """
     tra = build_tra(service, now=now, environment=environment)
     try:
-        response = send(_ENDPOINTS[environment], sign_cms(tra))
+        response = send(_ENDPOINTS[environment], build_login_envelope(sign_cms(tra)))
     except WsaaError:
         raise
     except Exception as error:
@@ -144,4 +181,4 @@ def request_ticket(
         # they travel intact instead of being flattened into "request failed".
         raise WsaaError(f"WSAA refused the request: {error}") from error
 
-    return parse_ticket(response)
+    return parse_login_response(response)

@@ -83,7 +83,7 @@ Rechazado: Python 3.14 (advertencias de Pydantic V1). Python 3.13 (3.12 es la op
 copiloto-monotributo/
 ├── pyproject.toml
 ├── .python-version              # 3.12
-├── .env.example                 # COPILOTO_EXTRACTOR, COPILOTO_CLI, COPILOTO_EXTRACTOR_CMD,
+├── docs/configuration.md        # COPILOTO_EXTRACTOR, COPILOTO_CLI, COPILOTO_EXTRACTOR_CMD,
 │                                # COPILOTO_API_PROVIDER, COPILOTO_MODEL, <PROVIDER>_API_KEY
 ├── README.md
 ├── config/
@@ -666,7 +666,7 @@ Un revisor confirma el plan si:
 7. `uv run copiloto run --case evals/cases/all_in_order.json` imprime un informe **en español rioplatense** con la nota de alcance argentino, el aviso, la categoría "estimada solo por ingresos" y la sección "No evaluado"; `... exclusion_by_income.json` pausa, muestra la alerta, acepta veredicto y notas, y termina con el informe; `... --auto-resume` termina sin preguntar y el informe dice que ningún contador lo revisó.
 8. `grep -rn "interrupt_before\|interrupt_after\|update_state\|ToolExecutor" src/ tests/` no devuelve resultados.
 9. `README.md` está en inglés, incluye el bloque Mermaid idéntico a `docs/graph.mmd` (que a su vez es idéntico a `draw_mermaid()` del grafo real), el disclaimer exacto de §4.11, la tabla de los tres modos de extractor y el paso `uv sync --extra api`.
-10. Ningún archivo del repo contiene facturas, nombres o CUITs reales; `.env` no está trackeado; no hay ninguna API key en el historial de commits.
+10. Ningún archivo del repo contiene facturas, nombres o CUITs reales; `.env` no está trackeado; **el repo no versiona ninguna plantilla `.env*`** (las variables se documentan en `docs/configuration.md`, así nadie llena un template con una key real y lo commitea); no hay ninguna API key en el historial.
 11. **Los tres modos de extractor funcionan y están testeados:** `fake` sin red; `cli` con tests que inyectan el runner del subprocess, más al menos un adaptador verificado contra un binario realmente instalado; `api` con tests unitarios sin key y un test de integración que se salta limpiamente. El modo `cli` sin herramienta disponible falla con un mensaje accionable y **nunca cae en silencio a `fake`**.
 12. Un clon limpio corre `uv sync && uv run pytest && uv run python -m copiloto.evals --extractor fake` en verde **sin API key, sin CLI de IA y sin red**.
 13. `LICENSE` contiene MIT a nombre del humano y el README lo declara.

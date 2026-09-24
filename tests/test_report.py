@@ -10,7 +10,7 @@ from datetime import date
 from decimal import Decimal
 
 from copiloto.analysis import Analysis
-from copiloto.models import HumanDecision, Issue, TaxpayerProfile
+from copiloto.models import DeclaredParameters, HumanDecision, Issue, TaxpayerProfile
 from copiloto.report import (
     DISCLAIMER_ES,
     NOT_EVALUATED,
@@ -48,6 +48,22 @@ RISKY = Analysis(
     months_to_top_cap=Decimal("92.2"),
 )
 
+# Income says A, a declared surface of 100 m2 says E: the surface is binding.
+BY_SURFACE = Analysis(
+    accumulated_12m=Decimal("9600000"),
+    projected_12m=Decimal("9733333.33"),
+    computed_category="E",
+    registered_category="A",
+    risk_level="medium",
+    reasons=("CATEGORY_MISMATCH", "SURFACE_ABOVE_REGISTERED_CAP"),
+    headroom_registered=Decimal("2409410.45"),
+    headroom_top=Decimal("117010838.75"),
+    months_to_registered_cap=Decimal("3.0"),
+    months_to_top_cap=Decimal("144.3"),
+    binding_parameter="surface",
+    evaluated_parameters=("income", "surface"),
+)
+
 
 def section(body: str, heading: str) -> str:
     """The text between `heading` and the next heading."""
@@ -56,7 +72,7 @@ def section(body: str, heading: str) -> str:
     return text
 
 
-def report(analysis=CALM, issues=(), decision=None, invoice_count=12) -> str:
+def report(analysis=CALM, issues=(), decision=None, invoice_count=12, declared=None) -> str:
     return render_report(
         analysis,
         issues=issues,
@@ -64,6 +80,7 @@ def report(analysis=CALM, issues=(), decision=None, invoice_count=12) -> str:
         scales=SCALES,
         human_decision=decision,
         invoice_count=invoice_count,
+        declared=declared,
     )
 
 
@@ -184,6 +201,40 @@ class TestHeadroom:
 
         assert "categoría registrada" not in section(body, "## Margen").lower()
         assert "117.010.838,75" in body
+
+
+class TestDeclaredParameters:
+    """What the taxpayer declared is shown, attributed, and removed from the limits."""
+
+    def test_shows_the_declared_values_and_says_who_declared_them(self) -> None:
+        body = report(declared=DeclaredParameters(surface_m2=40, annual_energy_kwh=5000))
+
+        assert "## Parámetros declarados" in body
+        assert "40 m²" in body
+        assert "5.000 kWh" in body
+        assert "declaraste" in body.lower()
+
+    def test_an_evaluated_parameter_leaves_the_not_evaluated_list(self) -> None:
+        body = report(analysis=BY_SURFACE, declared=DeclaredParameters(surface_m2=100))
+        limits = section(body, "## No evaluado")
+
+        assert "superficie" not in limits
+        assert "energía eléctrica" in limits
+        assert "alquileres" in limits
+
+    def test_says_which_parameter_set_the_category(self) -> None:
+        body = report(analysis=BY_SURFACE, declared=DeclaredParameters(surface_m2=100))
+
+        assert "Categoría estimada: E" in body
+        assert "superficie" in section(body, "## Ingresos").lower()
+        assert "solo por ingresos" not in body
+        assert "por encima de lo que admite tu categoría" in body.lower()
+
+    def test_without_declarations_the_category_is_income_only(self) -> None:
+        body = report()
+
+        assert "solo por ingresos" in body
+        assert "## Parámetros declarados" not in body
 
 
 class TestLimits:

@@ -16,7 +16,7 @@ the same bytes for the same input, and it is tested without the graph.
 from decimal import Decimal
 
 from copiloto.analysis import Analysis
-from copiloto.models import HumanDecision, Issue, TaxpayerProfile
+from copiloto.models import DeclaredParameters, HumanDecision, Issue, ParameterName, TaxpayerProfile
 from copiloto.scales import Scales
 
 SCOPE_NOTE_ES = (
@@ -34,15 +34,30 @@ DISCLAIMER_ES = (
     "son sintéticos."
 )
 
-# What this MVP never looks at. Listed in every report so that a low risk level
-# is not read as a complete assessment.
+# What this project does not look at unless the taxpayer declares it. Listed
+# in every report so that a low risk level is not read as a complete
+# assessment; a declared parameter leaves the list because it was evaluated.
 NOT_EVALUATED = (
     "superficie afectada a la actividad",
     "energía eléctrica consumida",
     "alquileres devengados",
     "cantidad de actividades y unidades de explotación",
     "gastos y adquisiciones no justificados",
+    "las excepciones por tamaño de la localidad donde está el local",
 )
+
+_EVALUATED_BY: dict[ParameterName, str] = {
+    "surface": "superficie afectada a la actividad",
+    "energy": "energía eléctrica consumida",
+    "rent": "alquileres devengados",
+}
+
+_PARAMETER_LABELS: dict[ParameterName, str] = {
+    "income": "ingresos",
+    "surface": "superficie",
+    "energy": "energía eléctrica",
+    "rent": "alquileres",
+}
 
 _RISK_LABELS = {
     "low": "bajo",
@@ -68,11 +83,53 @@ _REASON_LABELS = {
     "UNIT_PRICE_ABOVE_MAX": (
         "Hay un producto facturado por encima del precio unitario máximo permitido."
     ),
+    "SURFACE_ABOVE_REGISTERED_CAP": (
+        "La superficie declarada está por encima de lo que admite tu categoría registrada."
+    ),
+    "ENERGY_ABOVE_REGISTERED_CAP": (
+        "La energía declarada está por encima de lo que admite tu categoría registrada."
+    ),
+    "RENT_ABOVE_REGISTERED_CAP": (
+        "Los alquileres declarados están por encima de lo que admite tu categoría registrada."
+    ),
+    "SURFACE_ABOVE_TOP_CAP": "La superficie declarada supera el máximo del régimen.",
+    "ENERGY_ABOVE_TOP_CAP": "La energía declarada supera el máximo del régimen.",
+    "RENT_ABOVE_TOP_CAP": "Los alquileres declarados superan el máximo del régimen.",
 }
 
 
 def _money(amount: Decimal) -> str:
     return f"$ {amount:,.2f}".replace(",", "@").replace(".", ",").replace("@", ".")
+
+
+def _integer(value: int) -> str:
+    return f"{value:,}".replace(",", ".")
+
+
+def _category_line(analysis: Analysis) -> str:
+    estimated = analysis.computed_category or "ninguna (supera el tope del régimen)"
+    if analysis.evaluated_parameters == ("income",):
+        return f"- Categoría estimada: {estimated} — calculada solo por ingresos."
+
+    evaluated = ", ".join(_PARAMETER_LABELS[p] for p in analysis.evaluated_parameters)
+    binding = _PARAMETER_LABELS[analysis.binding_parameter]
+    return (
+        f"- Categoría estimada: {estimated} — definida por {binding}, el parámetro más "
+        f"alto entre los evaluados ({evaluated})."
+    )
+
+
+def _declared_section(declared: DeclaredParameters) -> list[str]:
+    lines = [
+        "Estos valores los declaraste vos; no fueron verificados contra ningún comprobante.",
+    ]
+    if declared.surface_m2 is not None:
+        lines.append(f"- Superficie afectada: {_integer(declared.surface_m2)} m²")
+    if declared.annual_energy_kwh is not None:
+        lines.append(f"- Energía eléctrica anual: {_integer(declared.annual_energy_kwh)} kWh")
+    if declared.annual_rent is not None:
+        lines.append(f"- Alquileres anuales: {_money(declared.annual_rent)}")
+    return lines
 
 
 def _months(months: Decimal) -> str:
@@ -155,8 +212,10 @@ def render_report(
     scales: Scales,
     human_decision: HumanDecision | None = None,
     invoice_count: int,
+    declared: DeclaredParameters | None = None,
 ) -> str:
     """Render the analysis as markdown, in Spanish."""
+    declared = declared if declared and declared.declared() else None
     lines: list[str] = [SCOPE_NOTE_ES, "", DISCLAIMER_ES, "", "# Informe de monotributo", ""]
 
     lines += ["## Contribuyente", ""]
@@ -177,9 +236,11 @@ def render_report(
     else:
         lines.append(f"- Facturas analizadas: {invoice_count}")
     lines.append(f"- Acumulado de los últimos 12 meses móviles: {_money(analysis.accumulated_12m)}")
-    estimated = analysis.computed_category or "ninguna (supera el tope del régimen)"
-    lines.append(f"- Categoría estimada: {estimated} — calculada solo por ingresos.")
+    lines.append(_category_line(analysis))
     lines.append("")
+
+    if declared is not None:
+        lines += ["## Parámetros declarados", "", *_declared_section(declared), ""]
 
     lines += [
         "## Proyección",
@@ -213,11 +274,17 @@ def render_report(
 
     lines += ["## Revisión", "", *_review_section(human_decision), ""]
 
+    evaluated = {_EVALUATED_BY[p] for p in analysis.evaluated_parameters if p in _EVALUATED_BY}
+    scope = (
+        "Este informe mira solamente tus ingresos."
+        if not evaluated
+        else "Este informe mira tus ingresos y los parámetros que declaraste."
+    )
     lines += [
         "## No evaluado",
         "",
-        "Este informe mira solamente tus ingresos. No evaluamos:",
-        *[f"- {cause}" for cause in NOT_EVALUATED],
+        f"{scope} No evaluamos:",
+        *[f"- {cause}" for cause in NOT_EVALUATED if cause not in evaluated],
         "",
         "Por eso un riesgo bajo no es una verificación integral de tu situación: "
         "hay causales de exclusión que esta herramienta no mira.",

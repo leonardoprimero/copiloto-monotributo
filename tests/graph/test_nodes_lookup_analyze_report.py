@@ -10,7 +10,13 @@ from decimal import Decimal
 from copiloto.analysis import RiskPolicy
 from copiloto.graph.nodes import make_analyze_node, make_lookup_node, make_report_node
 from copiloto.graph.state import CopilotState
-from copiloto.models import ExtractedInvoice, HumanDecision, InvoiceItem, Issue
+from copiloto.models import (
+    DeclaredParameters,
+    ExtractedInvoice,
+    HumanDecision,
+    InvoiceItem,
+    Issue,
+)
 from copiloto.registry import default_registry
 from copiloto.scales import load_scales
 
@@ -79,6 +85,22 @@ class TestAnalyzeNode:
 
         assert result["analysis"].risk_level == "low"
         assert result["analysis"].registered_category == "A"
+
+    def test_reads_the_declared_parameters_from_the_state(self) -> None:
+        """Income says A; a declared surface of 100 m2 says E."""
+        node = make_analyze_node(scales=SCALES, today=TODAY, policy=POLICY)
+
+        result = node(
+            {
+                "invoices": (invoice("800000"),),
+                "issues": [],
+                "taxpayer": default_registry().lookup(KNOWN_CUIT),
+                "declared": DeclaredParameters(surface_m2=100),
+            }
+        )
+
+        assert result["analysis"].computed_category == "E"
+        assert result["analysis"].binding_parameter == "surface"
 
     def test_reads_the_issues_the_earlier_nodes_appended(self) -> None:
         """An over-priced good is exclusion, and that arrives as an issue."""

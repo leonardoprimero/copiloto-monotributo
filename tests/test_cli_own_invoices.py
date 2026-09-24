@@ -94,6 +94,91 @@ class TestOwnInvoices:
         assert "Categoría registrada: K" in capsys.readouterr().out
 
 
+class TestDeclaredParameters:
+    def test_declared_parameters_reach_the_report(self, folder: Path, capsys, monkeypatch) -> None:
+        monkeypatch.setattr(
+            "copiloto.cli.build_extractor_factory", _mapping_factory(folder)
+        )
+
+        code = main(
+            [
+                "run",
+                "--invoices-dir",
+                str(folder),
+                "--cuit",
+                "20-11111111-2",
+                "--category",
+                "A",
+                "--today",
+                "2026-09-24",
+                "--extractor",
+                "cli",
+                "--surface-m2",
+                "25",
+                "--energy-kwh",
+                "3000",
+                "--annual-rent",
+                "1000000",
+            ]
+        )
+        out = capsys.readouterr().out
+
+        assert code == 0
+        assert "## Parámetros declarados" in out
+        assert "25 m²" in out
+        assert "3.000 kWh" in out
+        assert "1.000.000,00" in out
+
+    def test_a_declared_surface_can_change_the_category(
+        self, folder: Path, capsys, monkeypatch
+    ) -> None:
+        """Three invoices of 800,000 are A by income; 100 m2 is E by surface."""
+        monkeypatch.setattr(
+            "copiloto.cli.build_extractor_factory", _mapping_factory(folder)
+        )
+
+        main(
+            [
+                "run",
+                "--invoices-dir",
+                str(folder),
+                "--cuit",
+                "20-11111111-2",
+                "--category",
+                "A",
+                "--today",
+                "2026-09-24",
+                "--extractor",
+                "cli",
+                "--surface-m2",
+                "100",
+                "--auto-resume",
+            ]
+        )
+
+        assert "Categoría estimada: E" in capsys.readouterr().out
+
+    def test_a_negative_parameter_is_rejected_up_front(self, folder: Path, capsys) -> None:
+        code = main(
+            [
+                "run",
+                "--invoices-dir",
+                str(folder),
+                "--cuit",
+                "20-11111111-2",
+                "--category",
+                "A",
+                "--extractor",
+                "cli",
+                "--surface-m2",
+                "-5",
+            ]
+        )
+
+        assert code == 2
+        assert "superficie" in capsys.readouterr().err.lower()
+
+
 class TestArgumentRules:
     def test_a_folder_without_a_cuit_is_rejected(self, folder: Path, capsys) -> None:
         code = main(["run", "--invoices-dir", str(folder), "--category", "A"])

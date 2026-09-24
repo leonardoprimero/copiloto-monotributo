@@ -83,6 +83,7 @@ class TestAllowlistCompleteness:
             "Issue",
             "TaxpayerProfile",
             "HumanDecision",
+            "DeclaredParameters",
             "Analysis",
         }
 

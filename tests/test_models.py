@@ -12,6 +12,7 @@ import pytest
 from pydantic import ValidationError
 
 from copiloto.models import (
+    DeclaredParameters,
     ExtractedInvoice,
     HumanDecision,
     InvoiceItem,
@@ -33,6 +34,31 @@ def an_item(**overrides) -> InvoiceItem:
             **overrides,
         }
     )
+
+
+class TestDeclaredParameters:
+    def test_everything_is_optional(self) -> None:
+        """A service provider without premises has nothing to declare."""
+        declared = DeclaredParameters()
+
+        assert declared.surface_m2 is None
+        assert declared.annual_energy_kwh is None
+        assert declared.annual_rent is None
+
+    def test_rent_is_decimal(self) -> None:
+        assert DeclaredParameters(annual_rent="1000.50").annual_rent == Decimal("1000.50")  # pyright: ignore[reportArgumentType]
+
+    @pytest.mark.parametrize(
+        "field", ["surface_m2", "annual_energy_kwh", "annual_rent"]
+    )
+    def test_negative_values_are_rejected(self, field: str) -> None:
+        with pytest.raises(ValidationError):
+            DeclaredParameters(**{field: -1})  # pyright: ignore[reportArgumentType]
+
+    def test_declared_returns_the_parameters_that_were_given(self) -> None:
+        declared = DeclaredParameters(surface_m2=40, annual_rent=Decimal("10"))
+
+        assert declared.declared() == ("surface", "rent")
 
 
 class TestInvoiceItem:

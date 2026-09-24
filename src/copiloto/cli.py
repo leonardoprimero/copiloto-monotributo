@@ -13,11 +13,12 @@ import os
 import sys
 from collections.abc import Callable
 from datetime import date
-from decimal import Decimal
+from decimal import Decimal, InvalidOperation
 from pathlib import Path
 
 from langchain_core.runnables import RunnableConfig
 from langgraph.types import Command
+from pydantic import ValidationError
 
 from copiloto.analysis import RiskPolicy
 from copiloto.cuit import is_valid_cuit
@@ -28,7 +29,7 @@ from copiloto.extractors.fake import FakeExtractor
 from copiloto.extractors.protocol import ExtractionError, InvoiceExtractor
 from copiloto.extractors.resolve import resolve_cli_argv
 from copiloto.graph.builder import build_graph
-from copiloto.models import ExtractedInvoice, TaxpayerProfile
+from copiloto.models import DeclaredParameters, ExtractedInvoice, TaxpayerProfile
 from copiloto.registry import MockArcaRegistry
 from copiloto.scales import Scales, load_scales
 from copiloto.sources import SourceError, load_invoice_texts
@@ -48,6 +49,18 @@ _REASONS = {
     "PROJECTION_ABOVE_TOP_CAP": "al ritmo actual vas a superar el tope del régimen",
     "INCOME_ABOVE_TOP_CAP": "tus ingresos superan el tope de la categoría más alta",
     "UNIT_PRICE_ABOVE_MAX": "hay un producto por encima del precio unitario máximo",
+    "SURFACE_ABOVE_REGISTERED_CAP": "la superficie declarada supera la de tu categoría registrada",
+    "ENERGY_ABOVE_REGISTERED_CAP": "la energía declarada supera la de tu categoría registrada",
+    "RENT_ABOVE_REGISTERED_CAP": "los alquileres declarados superan los de tu categoría registrada",
+    "SURFACE_ABOVE_TOP_CAP": "la superficie declarada supera el máximo del régimen",
+    "ENERGY_ABOVE_TOP_CAP": "la energía declarada supera el máximo del régimen",
+    "RENT_ABOVE_TOP_CAP": "los alquileres declarados superan el máximo del régimen",
+}
+
+_PARAMETER_FLAGS = {
+    "surface_m2": "--surface-m2 (superficie)",
+    "annual_energy_kwh": "--energy-kwh (energía)",
+    "annual_rent": "--annual-rent (alquileres)",
 }
 
 _VERDICTS = {"confirmado": "confirmed", "descartado": "dismissed"}
@@ -134,7 +147,7 @@ def _print_alert(payload: dict) -> None:
     if payload["registered_category"] or payload["computed_category"]:
         print(
             f"Categoría registrada: {payload['registered_category'] or 'sin dato'}"
-            f"  ->  estimada por ingresos: {payload['computed_category'] or 'ninguna'}"
+            f"  ->  estimada: {payload['computed_category'] or 'ninguna'}"
         )
     if payload["accumulated_12m"] is not None:
         # Same formatting as the report: an alert that shows raw digits next to
@@ -163,6 +176,29 @@ def _ask_accountant() -> dict:
     verdict = _VERDICTS.get(answer, "confirmed")
     notes = input("Notas (opcional): ").strip()
     return {"verdict": verdict, "notes": notes, "reviewer": "accountant"}
+
+
+def _declared_from_args(args: argparse.Namespace) -> DeclaredParameters:
+    """Build the declared parameters, raising a readable message on bad input."""
+    hint = "tiene que ser un número mayor o igual a cero."
+    try:
+        rent = Decimal(args.annual_rent) if args.annual_rent is not None else None
+    except InvalidOperation as error:
+        raise ValueError(f"Revisá {_PARAMETER_FLAGS['annual_rent']}: {hint}") from error
+
+    try:
+        return DeclaredParameters(
+            surface_m2=args.surface_m2, annual_energy_kwh=args.energy_kwh, annual_rent=rent
+        )
+    except ValidationError as error:
+        fields = sorted(
+            {
+                _PARAMETER_FLAGS[str(e["loc"][0])]
+                for e in error.errors()
+                if str(e["loc"][0]) in _PARAMETER_FLAGS
+            }
+        )
+        raise ValueError(f"Revisá {', '.join(fields)}: {hint}") from error
 
 
 def _validate_own_invoice_args(args: argparse.Namespace, scales: Scales) -> str | None:
@@ -195,6 +231,12 @@ def _validate_own_invoice_args(args: argparse.Namespace, scales: Scales) -> str 
 
 def _run(args: argparse.Namespace) -> int:
     scales = load_scales()
+
+    try:
+        declared = _declared_from_args(args)
+    except ValueError as error:
+        print(str(error), file=sys.stderr)
+        return 2
 
     if args.invoices_dir:
         problem = _validate_own_invoice_args(args, scales)
@@ -244,7 +286,8 @@ def _run(args: argparse.Namespace) -> int:
     config: RunnableConfig = {"configurable": {"thread_id": thread}}
 
     state = graph.invoke(
-        {"taxpayer_cuit": taxpayer_cuit, "raw_invoices": raw_invoices}, config
+        {"taxpayer_cuit": taxpayer_cuit, "raw_invoices": raw_invoices, "declared": declared},
+        config,
     )
 
     if "__interrupt__" in state:
@@ -293,6 +336,20 @@ def main(argv: list[str] | None = None) -> int:
         choices=("fake", "cli", "api"),
         default=os.environ.get("COPILOTO_EXTRACTOR", "fake"),
         help="fake: sin red. cli: tu herramienta de IA. api: con clave de proveedor.",
+    )
+    run.add_argument(
+        "--surface-m2",
+        type=int,
+        help="Superficie afectada a la actividad, en m². Solo si tenés local.",
+    )
+    run.add_argument(
+        "--energy-kwh",
+        type=int,
+        help="Energía eléctrica consumida en los últimos 12 meses, en kWh. Solo si tenés local.",
+    )
+    run.add_argument(
+        "--annual-rent",
+        help="Alquileres devengados en los últimos 12 meses, en pesos.",
     )
     run.add_argument("--today", help="Fecha de corte YYYY-MM-DD.")
     run.add_argument(

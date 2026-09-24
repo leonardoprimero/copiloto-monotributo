@@ -4,14 +4,21 @@ Plain arithmetic over already-extracted invoices. No model participates here,
 which is what makes the conclusions auditable and the tests offline.
 """
 
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import date, timedelta
 from decimal import ROUND_HALF_UP, Decimal
 from typing import Literal
 
-from copiloto.categories import category_for_income
+from copiloto.categories import category_for_income, category_for_parameters
 from copiloto.dates import within_window
-from copiloto.models import ExtractedInvoice, Issue, TaxpayerProfile
+from copiloto.models import (
+    DeclaredParameters,
+    ExtractedInvoice,
+    Issue,
+    ParameterName,
+    TaxpayerProfile,
+)
 from copiloto.scales import Category, Scales
 
 RiskLevel = Literal["low", "medium", "high", "exclusion"]
@@ -57,13 +64,20 @@ class Analysis:
     # is no pace to extrapolate from or no registered cap; zero once reached.
     months_to_registered_cap: Decimal | None
     months_to_top_cap: Decimal | None
+    # Which parameter placed the taxpayer in `computed_category`, and which
+    # ones were looked at. Income is the baseline: with nothing declared, the
+    # category is by income alone and the report says exactly that.
+    binding_parameter: ParameterName = "income"
+    evaluated_parameters: tuple[ParameterName, ...] = ("income",)
 
     def __post_init__(self) -> None:
-        # Checkpoint deserialization hands back a list, so an Analysis restored
+        # Checkpoint deserialization hands back lists, so an Analysis restored
         # after a pause would not compare equal to the one that was saved.
         # Normalizing here makes the type hold whatever the source was.
         if not isinstance(self.reasons, tuple):
             object.__setattr__(self, "reasons", tuple(self.reasons))
+        if not isinstance(self.evaluated_parameters, tuple):
+            object.__setattr__(self, "evaluated_parameters", tuple(self.evaluated_parameters))
 
 
 def invoices_in_window(
@@ -131,13 +145,29 @@ def months_until(headroom: Decimal | None, *, projected_12m: Decimal) -> Decimal
     return months.quantize(_TENTHS, rounding=ROUND_HALF_UP)
 
 
-def _registered_cap(taxpayer: TaxpayerProfile | None, scales: Scales) -> Decimal | None:
+def _registered_category(taxpayer: TaxpayerProfile | None, scales: Scales) -> Category | None:
     if taxpayer is None:
         return None
     for category in scales.categories:
         if category.name == taxpayer.category:
-            return category.income_cap
+            return category
     return None
+
+
+def _physical_values(
+    declared: DeclaredParameters | None,
+) -> list[tuple[str, Decimal | int, Callable[[Category], Decimal | int]]]:
+    """The declared physical parameters, each with the cap it is measured against."""
+    if declared is None:
+        return []
+    values: list[tuple[str, Decimal | int, Callable[[Category], Decimal | int]]] = []
+    if declared.surface_m2 is not None:
+        values.append(("SURFACE", declared.surface_m2, lambda c: c.surface_cap_m2))
+    if declared.annual_energy_kwh is not None:
+        values.append(("ENERGY", declared.annual_energy_kwh, lambda c: c.annual_energy_cap_kwh))
+    if declared.annual_rent is not None:
+        values.append(("RENT", declared.annual_rent, lambda c: c.annual_rent_cap))
+    return values
 
 
 def analyze(
@@ -148,17 +178,21 @@ def analyze(
     today: date,
     scales: Scales,
     policy: RiskPolicy,
+    declared: DeclaredParameters | None = None,
 ) -> Analysis:
-    """Turn invoices and issues into a risk level with its reasons.
+    """Turn invoices, issues and declared parameters into a risk level with reasons.
 
     When several conditions apply the highest level wins, but every reason is
     kept so the report can explain the verdict instead of asserting it.
     """
     accumulated = accumulated_income(invoices, today=today)
     projected = projected_income(invoices, today=today, policy=policy)
-    computed = category_for_income(accumulated, scales)
-    top_cap = scales.top_category.income_cap
-    registered_cap = _registered_cap(taxpayer, scales)
+    computed, binding = category_for_parameters(accumulated, declared=declared, scales=scales)
+    top = scales.top_category
+    top_cap = top.income_cap
+    registered = _registered_category(taxpayer, scales)
+    registered_cap = registered.income_cap if registered else None
+    physical = _physical_values(declared)
 
     reasons: list[str] = []
     level: RiskLevel = "low"
@@ -171,13 +205,16 @@ def analyze(
 
     # Conditions that need a registered category are skipped when the taxpayer
     # is not in the registry: there is simply nothing to compare against.
-    if registered_cap is not None and taxpayer is not None:
+    if registered is not None and registered_cap is not None and taxpayer is not None:
         if accumulated >= registered_cap * policy.near_cap_ratio:
             raise_to("medium", "NEAR_REGISTERED_CAP")
         if computed is not None and computed.name != taxpayer.category:
             raise_to("medium", "CATEGORY_MISMATCH")
         if projected > registered_cap:
             raise_to("medium", "PROJECTION_ABOVE_REGISTERED_CAP")
+        for name, value, cap_of in physical:
+            if value > cap_of(registered):
+                raise_to("medium", f"{name}_ABOVE_REGISTERED_CAP")
 
     if accumulated >= top_cap * policy.near_cap_ratio:
         raise_to("high", "NEAR_TOP_CAP")
@@ -188,6 +225,11 @@ def analyze(
         raise_to("exclusion", "INCOME_ABOVE_TOP_CAP")
     if any(issue.code == "UNIT_PRICE_ABOVE_MAX" for issue in issues):
         raise_to("exclusion", "UNIT_PRICE_ABOVE_MAX")
+    # A physical parameter over the top category's cap excludes on its own,
+    # however modest the income.
+    for name, value, cap_of in physical:
+        if value > cap_of(top):
+            raise_to("exclusion", f"{name}_ABOVE_TOP_CAP")
 
     headroom_registered = registered_cap - accumulated if registered_cap is not None else None
     headroom_top = top_cap - accumulated
@@ -203,4 +245,6 @@ def analyze(
         headroom_top=headroom_top,
         months_to_registered_cap=months_until(headroom_registered, projected_12m=projected),
         months_to_top_cap=months_until(headroom_top, projected_12m=projected),
+        binding_parameter=binding,
+        evaluated_parameters=("income", *(declared.declared() if declared else ())),
     )

@@ -10,13 +10,21 @@ import operator
 from typing import Annotated, TypedDict
 
 from copiloto.analysis import Analysis
-from copiloto.models import ExtractedInvoice, HumanDecision, Issue, TaxpayerProfile
+from copiloto.models import (
+    DeclaredParameters,
+    ExtractedInvoice,
+    HumanDecision,
+    Issue,
+    TaxpayerProfile,
+)
 
 
 class CopilotState(TypedDict, total=False):
     # Inputs
     taxpayer_cuit: str
     raw_invoices: tuple[str, ...]
+    # Optional input: surface, energy and rent as declared by the taxpayer.
+    declared: DeclaredParameters | None
 
     # Written by extract_invoices
     invoices: tuple[ExtractedInvoice, ...]

@@ -13,6 +13,7 @@ from langgraph.checkpoint.serde.jsonplus import JsonPlusSerializer
 
 from copiloto.analysis import Analysis
 from copiloto.models import (
+    DeclaredParameters,
     ExtractedInvoice,
     HumanDecision,
     InvoiceItem,
@@ -28,6 +29,7 @@ ALLOWED_TYPES = (
     Issue,
     TaxpayerProfile,
     HumanDecision,
+    DeclaredParameters,
     Analysis,
 )
 

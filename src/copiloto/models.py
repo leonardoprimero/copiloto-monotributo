@@ -55,6 +55,34 @@ class Issue(Frozen):
     invoice_number: str | None = None
 
 
+ParameterName = Literal["income", "surface", "energy", "rent"]
+
+
+class DeclaredParameters(Frozen):
+    """The physical parameters, as declared by the taxpayer.
+
+    Income comes from invoices; surface, energy and rent can only come from the
+    person, so they are declared and the report says so. Every field is optional
+    because a service provider without premises has nothing to declare, and an
+    undeclared parameter is reported as not evaluated, never assumed to be zero.
+    """
+
+    surface_m2: int | None = Field(default=None, ge=0)
+    annual_energy_kwh: int | None = Field(default=None, ge=0)
+    annual_rent: Decimal | None = Field(default=None, ge=0)
+
+    def declared(self) -> tuple[ParameterName, ...]:
+        """The names of the parameters that were actually given."""
+        names: list[ParameterName] = []
+        if self.surface_m2 is not None:
+            names.append("surface")
+        if self.annual_energy_kwh is not None:
+            names.append("energy")
+        if self.annual_rent is not None:
+            names.append("rent")
+        return tuple(names)
+
+
 class TaxpayerProfile(Frozen):
     """What the (mocked) ARCA registry knows about a taxpayer."""
 

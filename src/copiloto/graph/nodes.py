@@ -126,6 +126,7 @@ def make_analyze_node(*, scales: Scales, today: date, policy: RiskPolicy):
                 today=today,
                 scales=scales,
                 policy=policy,
+                declared=state.get("declared"),
             )
         }
 
@@ -210,6 +211,7 @@ def make_report_node(*, scales: Scales):
                 scales=scales,
                 human_decision=state.get("human_decision"),
                 invoice_count=len(state.get("invoices", ())),
+                declared=state.get("declared"),
             )
         }
 

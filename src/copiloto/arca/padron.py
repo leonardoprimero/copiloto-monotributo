@@ -3,8 +3,14 @@
 The service is `ws_sr_constancia_inscripcion`, documented in ARCA's manual for
 developers version 3.4 (08/05/23). It returns a `personaReturn` carrying
 `datosGenerales`, and then `datosMonotributo` or `datosRegimenGeneral`
-depending on what the taxpayer is, or an `errorConstancia` when the CUIT does
-not exist.
+depending on what the taxpayer is, or an `errorConstancia` when no constancia
+can be issued.
+
+The manual's only `errorConstancia` example is a CUIT that does not exist.
+The live service says that with a SOAP fault instead, and uses
+`errorConstancia` for CUITs that exist but cannot be certified: cancelled, or
+blocked until their owner registers biometric data. Those are not "not a
+monotributista", and they are reported as errors with ARCA's own reasons.
 
 The copilot reads exactly one thing from all of that: the letter of the
 monotributo category. The rest is somebody's fiscal profile and is none of its
@@ -31,8 +37,31 @@ from copiloto.models import TaxpayerProfile
 _CATEGORY = re.compile(r"^([A-K])\b")
 
 
+# How the padrón says a CUIT does not exist, both as a SOAP fault on the wire
+# and inside the manual's errorConstancia example.
+NOT_FOUND = "No existe persona con ese Id"
+
+
 class PadronError(RuntimeError):
     """The padrón answered something this copilot cannot read."""
+
+
+class PersonNotFound(PadronError):
+    """The padrón has no one with that CUIT."""
+
+
+class ConstanciaUnavailable(PadronError):
+    """The CUIT exists, but ARCA will not issue its constancia.
+
+    `reasons` are ARCA's own words, one per `error` element, because they say
+    what the taxpayer has to go and fix.
+    """
+
+    def __init__(self, cuit: str, reasons: tuple[str, ...]) -> None:
+        self.cuit = cuit
+        self.reasons = reasons
+        listed = " ".join(reasons) or "ARCA gave no reason."
+        super().__init__(f"ARCA will not issue the constancia for {cuit}: {listed}")
 
 
 def _formatted_cuit(digits: str) -> str:
@@ -59,14 +88,24 @@ def parse_persona(response_xml: str) -> TaxpayerProfile | None:
     Returns None rather than raising for the two ordinary cases: a CUIT that
     does not exist, and somebody registered in the régimen general. Neither is
     a failure, and neither is something this copilot has anything to say about.
+
+    Raises `ConstanciaUnavailable` when the CUIT exists but ARCA refuses to
+    certify it. That one is not ordinary, and hiding it behind None would read
+    exactly like "not a monotributista".
     """
     try:
         root = ElementTree.fromstring(response_xml)
     except Exception as error:
         raise PadronError(f"The padrón answered something that is not XML: {error}") from error
 
-    if root.find(".//errorConstancia") is not None:
-        return None
+    error_constancia = root.find(".//errorConstancia")
+    if error_constancia is not None:
+        reasons = tuple(
+            e.text.strip() for e in error_constancia.findall("error") if e.text and e.text.strip()
+        )
+        if reasons and all(r == NOT_FOUND for r in reasons):
+            return None
+        raise ConstanciaUnavailable(_optional(error_constancia, "idPersona"), reasons)
 
     monotributo = root.find(".//datosMonotributo")
     if monotributo is None:

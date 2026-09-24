@@ -13,11 +13,12 @@ from collections.abc import Callable
 from datetime import datetime
 from pathlib import Path
 
-from copiloto.arca.padron import PadronError
+from copiloto.arca.padron import NOT_FOUND, PadronError, PersonNotFound
 from copiloto.arca.registry import ArcaRegistry, utc_now
 from copiloto.arca.signing import signer_from_files
 from copiloto.arca.soap import (
     ENDPOINTS,
+    SoapError,
     build_dummy_envelope,
     build_persona_envelope,
     parse_dummy,
@@ -100,6 +101,12 @@ def build_registry(
         )
         try:
             return post(ENDPOINTS[environment], envelope)
+        except SoapError as error:
+            # The live service says "does not exist" with a fault, not with the
+            # errorConstancia the manual shows. It is an answer, not a failure.
+            if str(error).strip() == NOT_FOUND:
+                raise PersonNotFound(cuit) from error
+            raise PadronError(f"La consulta al padrón falló: {error}") from error
         except Exception as error:
             raise PadronError(f"La consulta al padrón falló: {error}") from error
 

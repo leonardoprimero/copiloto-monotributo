@@ -16,13 +16,17 @@ from pathlib import Path
 import pytest
 
 from copiloto.arca.client import build_registry
+from copiloto.arca.padron import ConstanciaUnavailable, PadronError
+from copiloto.arca.soap import SoapError
 from copiloto.arca.wsaa import HOMOLOGACION
 from tests.arca.certificates import write_self_signed
 from tests.arca.recorded import (
     LOGIN_CMS_RESPONSE,
     LOGIN_SIGN,
     LOGIN_TOKEN,
+    PERSONA_BLOCKED,
     PERSONA_MONOTRIBUTISTA,
+    PERSONA_NOT_FOUND_FAULT,
 )
 
 # The evening the responses were recorded. The recorded ticket expires the next
@@ -139,3 +143,43 @@ class TestTheTicketOutlivesTheProcess:
         a_registry(credentials, RecordedArca()).lookup("27-01594221-0")
 
         assert set(tmp_path.iterdir()) == before
+
+
+class FaultingArca(RecordedArca):
+    """Logs in normally, then answers the padrón with a SOAP fault."""
+
+    def __init__(self, fault: str) -> None:
+        super().__init__()
+        self.fault = fault
+
+    def __call__(self, url: str, envelope: str) -> str:
+        if url.endswith("/personaServiceA5"):
+            self.calls.append((url, envelope))
+            raise SoapError(self.fault)
+        return super().__call__(url, envelope)
+
+
+class TestWhenThePadronSaysNo:
+    def test_a_cuit_that_does_not_exist_is_unknown(
+        self, credentials: tuple[Path, Path]
+    ) -> None:
+        """On the wire, "does not exist" is a fault, not an errorConstancia."""
+        registry = a_registry(credentials, FaultingArca(PERSONA_NOT_FOUND_FAULT))
+
+        assert registry.lookup("27-01594221-0") is None
+
+    def test_any_other_fault_is_still_an_error(self, credentials: tuple[Path, Path]) -> None:
+        registry = a_registry(credentials, FaultingArca("Error interno"))
+
+        with pytest.raises(PadronError, match="Error interno"):
+            registry.lookup("27-01594221-0")
+
+    def test_a_blocked_constancia_reaches_the_caller_with_its_reasons(
+        self, credentials: tuple[Path, Path]
+    ) -> None:
+        registry = a_registry(credentials, RecordedArca(persona=PERSONA_BLOCKED))
+
+        with pytest.raises(ConstanciaUnavailable) as error:
+            registry.lookup("20-00000051-6")
+
+        assert error.value.reasons

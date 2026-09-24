@@ -14,9 +14,11 @@ word. Inventing a mapping for `idCategoria` would be guessing.
 
 import pytest
 
-from copiloto.arca.padron import PadronError, parse_persona
+from copiloto.arca.padron import ConstanciaUnavailable, PadronError, parse_persona
 from copiloto.models import TaxpayerProfile
+from tests.arca.recorded import PERSONA_BLOCKED, PERSONA_MONOTRIBUTISTA
 from tests.arca.responses import JURIDICA, MONOTRIBUTISTA, NO_EXISTE, REGIMEN_GENERAL
+
 
 def found(response: str) -> TaxpayerProfile:
     """Parse a response that must describe a monotributista."""
@@ -51,7 +53,53 @@ class TestWhoIsNotAMonotributista:
         assert parse_persona(REGIMEN_GENERAL) is None
 
     def test_a_cuit_that_does_not_exist_is_not_one_either(self) -> None:
+        """The manual's form of "does not exist". The wire uses a fault."""
         assert parse_persona(NO_EXISTE) is None
+
+
+class TestWhatTheWireSends:
+    """Responses recorded from homologación, not copied from the manual."""
+
+    def test_a_real_monotributista_reads_the_same_as_the_manual_one(self) -> None:
+        profile = found(PERSONA_MONOTRIBUTISTA)
+
+        assert (profile.cuit, profile.category) == ("27-01594221-0", "B")
+
+    def test_a_risk_caracterizacion_is_not_mistaken_for_the_category(self) -> None:
+        """The same response says "CATEGORÍA A: MUY BAJO RIESGO". That is a
+        risk rating, not the monotributo category, which is B."""
+        assert "CATEGORÍA A" in PERSONA_MONOTRIBUTISTA
+        assert found(PERSONA_MONOTRIBUTISTA).category == "B"
+
+
+class TestAConstanciaThatCannotBeIssued:
+    """The CUIT exists, but ARCA will not certify anything about it.
+
+    Recorded: a CUIT cancelled for not constituting its electronic fiscal
+    domicile, whose constancia is also blocked until biometric data is
+    registered. Reporting that as "not a monotributista" would hide exactly
+    the situation somebody needs to hear about.
+    """
+
+    def test_it_is_an_error_not_an_absence(self) -> None:
+        with pytest.raises(ConstanciaUnavailable):
+            parse_persona(PERSONA_BLOCKED)
+
+    def test_it_carries_every_reason_arca_gave(self) -> None:
+        with pytest.raises(ConstanciaUnavailable) as error:
+            parse_persona(PERSONA_BLOCKED)
+
+        assert len(error.value.reasons) == 3
+        assert any("biométricos" in reason for reason in error.value.reasons)
+
+    def test_the_reasons_are_in_the_message(self) -> None:
+        with pytest.raises(ConstanciaUnavailable, match="fue cancelada"):
+            parse_persona(PERSONA_BLOCKED)
+
+    def test_it_is_still_a_padron_error(self) -> None:
+        """Callers already handling PadronError keep handling this one."""
+        with pytest.raises(PadronError):
+            parse_persona(PERSONA_BLOCKED)
 
 
 class TestBrokenResponses:

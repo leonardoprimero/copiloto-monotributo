@@ -21,7 +21,7 @@ timeouts and retries, none of which belong in here.
 from collections.abc import Callable
 from datetime import UTC, datetime
 
-from copiloto.arca.padron import PadronError, parse_persona
+from copiloto.arca.padron import PadronError, PersonNotFound, parse_persona
 from copiloto.arca.wsaa import AccessTicket
 from copiloto.cuit import is_valid_cuit, normalize_cuit
 from copiloto.models import TaxpayerProfile
@@ -79,7 +79,10 @@ class ArcaRegistry:
             raise PadronError(f"{cuit} fails its check digit, so it was not looked up.")
 
         ticket = self._ticket_for(self._clock())
-        response = self._call_padron(ticket.token, ticket.sign, normalize_cuit(cuit))
+        try:
+            response = self._call_padron(ticket.token, ticket.sign, normalize_cuit(cuit))
+        except PersonNotFound:
+            return None
         return parse_persona(response)
 
     def known_cuits(self) -> tuple[str, ...]:

@@ -11,9 +11,12 @@ keeps these small enough to read in one go.
 
 from datetime import date
 
+from copiloto.analysis import RiskPolicy, analyze
 from copiloto.extractors.protocol import ExtractionError, InvoiceExtractor
 from copiloto.graph.state import CopilotState
 from copiloto.models import ExtractedInvoice, Issue
+from copiloto.registry import TaxpayerRegistry
+from copiloto.report import render_report
 from copiloto.scales import Scales
 from copiloto.validation import (
     validate_invoice_amounts,
@@ -81,3 +84,73 @@ def make_validate_node(*, scales: Scales, today: date):
         return {"issues": issues}
 
     return validate_invoices
+
+
+def make_lookup_node(registry: TaxpayerRegistry):
+    """Build the node that asks the registry which category is on file."""
+
+    def lookup_taxpayer(state: CopilotState) -> dict:
+        cuit = state.get("taxpayer_cuit", "")
+        profile = registry.lookup(cuit)
+        if profile is None:
+            # Absence is reported, never filled in with a guess: without a
+            # registered category there is nothing to compare against, and the
+            # analysis skips those rules rather than inventing them.
+            return {
+                "taxpayer": None,
+                "issues": [
+                    Issue(
+                        code="TAXPAYER_NOT_FOUND",
+                        severity="warning",
+                        message=f"CUIT {cuit} is not in the registry, so the "
+                        "registered category is unknown.",
+                    )
+                ],
+            }
+        return {"taxpayer": profile, "issues": []}
+
+    return lookup_taxpayer
+
+
+def make_analyze_node(*, scales: Scales, today: date, policy: RiskPolicy):
+    """Build the node that turns invoices and issues into a risk level."""
+
+    def analyze_income(state: CopilotState) -> dict:
+        return {
+            "analysis": analyze(
+                state.get("invoices", ()),
+                issues=tuple(state.get("issues", [])),
+                taxpayer=state.get("taxpayer"),
+                today=today,
+                scales=scales,
+                policy=policy,
+            )
+        }
+
+    return analyze_income
+
+
+def make_report_node(*, scales: Scales):
+    """Build the node that renders the analysis for the taxpayer.
+
+    The node only adapts state to arguments; the rendering itself is a pure
+    function tested on its own.
+    """
+
+    def write_report(state: CopilotState) -> dict:
+        analysis = state.get("analysis")
+        if analysis is None:  # pragma: no cover - the graph always analyses first
+            raise RuntimeError("write_report reached without an analysis")
+
+        return {
+            "report": render_report(
+                analysis,
+                issues=tuple(state.get("issues", [])),
+                taxpayer=state.get("taxpayer"),
+                scales=scales,
+                human_decision=state.get("human_decision"),
+                invoice_count=len(state.get("invoices", ())),
+            )
+        }
+
+    return write_report

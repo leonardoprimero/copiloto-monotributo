@@ -1,0 +1,22 @@
+{
+  "id": "empty_input",
+  "description": "No invoices at all.",
+  "today": "2026-09-24",
+  "taxpayer_cuit": "20-11111111-2",
+  "registry_entry": {
+    "cuit": "20-11111111-2",
+    "name": "Synthetic Taxpayer One",
+    "category": "A"
+  },
+  "invoices": [],
+  "invoice_texts": [],
+  "expected": {
+    "route": "review",
+    "risk_level": "low",
+    "computed_category": "A",
+    "issue_codes": [
+      "NO_INVOICES"
+    ],
+    "rationale": "Zero income maps to category A and no risk condition applies, which reads exactly like a clean result. It is missing data, so NO_INVOICES escalates instead."
+  }
+}

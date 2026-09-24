@@ -1,0 +1,214 @@
+{
+  "id": "boundary_exact_cap",
+  "description": "The year totals the category A cap to the cent.",
+  "today": "2026-09-24",
+  "taxpayer_cuit": "20-11111111-2",
+  "registry_entry": {
+    "cuit": "20-11111111-2",
+    "name": "Synthetic Taxpayer One",
+    "category": "A"
+  },
+  "invoices": [
+    {
+      "number": "0001-00000000",
+      "issuer_cuit": "20-11111111-2",
+      "issue_date": "2026-09-15",
+      "items": [
+        {
+          "description": "Servicios de consultoria en software",
+          "quantity": "1",
+          "unit_price": "1000000",
+          "total": "1000000",
+          "kind": "service"
+        }
+      ],
+      "total": "1000000"
+    },
+    {
+      "number": "0001-00000001",
+      "issuer_cuit": "20-11111111-2",
+      "issue_date": "2026-08-15",
+      "items": [
+        {
+          "description": "Servicios de consultoria en software",
+          "quantity": "1",
+          "unit_price": "1000000",
+          "total": "1000000",
+          "kind": "service"
+        }
+      ],
+      "total": "1000000"
+    },
+    {
+      "number": "0001-00000002",
+      "issuer_cuit": "20-11111111-2",
+      "issue_date": "2026-07-15",
+      "items": [
+        {
+          "description": "Servicios de consultoria en software",
+          "quantity": "1",
+          "unit_price": "1000000",
+          "total": "1000000",
+          "kind": "service"
+        }
+      ],
+      "total": "1000000"
+    },
+    {
+      "number": "0001-00000003",
+      "issuer_cuit": "20-11111111-2",
+      "issue_date": "2026-06-15",
+      "items": [
+        {
+          "description": "Servicios de consultoria en software",
+          "quantity": "1",
+          "unit_price": "1000000",
+          "total": "1000000",
+          "kind": "service"
+        }
+      ],
+      "total": "1000000"
+    },
+    {
+      "number": "0001-00000004",
+      "issuer_cuit": "20-11111111-2",
+      "issue_date": "2026-05-15",
+      "items": [
+        {
+          "description": "Servicios de consultoria en software",
+          "quantity": "1",
+          "unit_price": "1000000",
+          "total": "1000000",
+          "kind": "service"
+        }
+      ],
+      "total": "1000000"
+    },
+    {
+      "number": "0001-00000005",
+      "issuer_cuit": "20-11111111-2",
+      "issue_date": "2026-04-15",
+      "items": [
+        {
+          "description": "Servicios de consultoria en software",
+          "quantity": "1",
+          "unit_price": "1000000",
+          "total": "1000000",
+          "kind": "service"
+        }
+      ],
+      "total": "1000000"
+    },
+    {
+      "number": "0001-00000006",
+      "issuer_cuit": "20-11111111-2",
+      "issue_date": "2026-03-15",
+      "items": [
+        {
+          "description": "Servicios de consultoria en software",
+          "quantity": "1",
+          "unit_price": "1000000",
+          "total": "1000000",
+          "kind": "service"
+        }
+      ],
+      "total": "1000000"
+    },
+    {
+      "number": "0001-00000007",
+      "issuer_cuit": "20-11111111-2",
+      "issue_date": "2026-02-15",
+      "items": [
+        {
+          "description": "Servicios de consultoria en software",
+          "quantity": "1",
+          "unit_price": "1000000",
+          "total": "1000000",
+          "kind": "service"
+        }
+      ],
+      "total": "1000000"
+    },
+    {
+      "number": "0001-00000008",
+      "issuer_cuit": "20-11111111-2",
+      "issue_date": "2026-01-15",
+      "items": [
+        {
+          "description": "Servicios de consultoria en software",
+          "quantity": "1",
+          "unit_price": "1000000",
+          "total": "1000000",
+          "kind": "service"
+        }
+      ],
+      "total": "1000000"
+    },
+    {
+      "number": "0001-00000009",
+      "issuer_cuit": "20-11111111-2",
+      "issue_date": "2025-12-15",
+      "items": [
+        {
+          "description": "Servicios de consultoria en software",
+          "quantity": "1",
+          "unit_price": "1000000",
+          "total": "1000000",
+          "kind": "service"
+        }
+      ],
+      "total": "1000000"
+    },
+    {
+      "number": "0001-00000010",
+      "issuer_cuit": "20-11111111-2",
+      "issue_date": "2025-11-15",
+      "items": [
+        {
+          "description": "Servicios de consultoria en software",
+          "quantity": "1",
+          "unit_price": "1000000",
+          "total": "1000000",
+          "kind": "service"
+        }
+      ],
+      "total": "1000000"
+    },
+    {
+      "number": "0001-00000011",
+      "issuer_cuit": "20-11111111-2",
+      "issue_date": "2025-10-15",
+      "items": [
+        {
+          "description": "Servicios de consultoria en software",
+          "quantity": "1",
+          "unit_price": "1009410.45",
+          "total": "1009410.45",
+          "kind": "service"
+        }
+      ],
+      "total": "1009410.45"
+    }
+  ],
+  "invoice_texts": [
+    "FACTURA C\nPunto de venta 0001 - Comprobante 00000000\nCUIT emisor: 20-11111111-2\nFecha de emision: 15/09/2026\n\nDetalle:\n- Servicios de consultoria en software | Cantidad 1,00 | Precio unitario 1.000.000,00\n\nTOTAL: $ 1.000.000,00",
+    "FACTURA C\nPunto de venta 0001 - Comprobante 00000001\nCUIT emisor: 20-11111111-2\nFecha de emision: 15/08/2026\n\nDetalle:\n- Servicios de consultoria en software | Cantidad 1,00 | Precio unitario 1.000.000,00\n\nTOTAL: $ 1.000.000,00",
+    "FACTURA C\nPunto de venta 0001 - Comprobante 00000002\nCUIT emisor: 20-11111111-2\nFecha de emision: 15/07/2026\n\nDetalle:\n- Servicios de consultoria en software | Cantidad 1,00 | Precio unitario 1.000.000,00\n\nTOTAL: $ 1.000.000,00",
+    "FACTURA C\nPunto de venta 0001 - Comprobante 00000003\nCUIT emisor: 20-11111111-2\nFecha de emision: 15/06/2026\n\nDetalle:\n- Servicios de consultoria en software | Cantidad 1,00 | Precio unitario 1.000.000,00\n\nTOTAL: $ 1.000.000,00",
+    "FACTURA C\nPunto de venta 0001 - Comprobante 00000004\nCUIT emisor: 20-11111111-2\nFecha de emision: 15/05/2026\n\nDetalle:\n- Servicios de consultoria en software | Cantidad 1,00 | Precio unitario 1.000.000,00\n\nTOTAL: $ 1.000.000,00",
+    "FACTURA C\nPunto de venta 0001 - Comprobante 00000005\nCUIT emisor: 20-11111111-2\nFecha de emision: 15/04/2026\n\nDetalle:\n- Servicios de consultoria en software | Cantidad 1,00 | Precio unitario 1.000.000,00\n\nTOTAL: $ 1.000.000,00",
+    "FACTURA C\nPunto de venta 0001 - Comprobante 00000006\nCUIT emisor: 20-11111111-2\nFecha de emision: 15/03/2026\n\nDetalle:\n- Servicios de consultoria en software | Cantidad 1,00 | Precio unitario 1.000.000,00\n\nTOTAL: $ 1.000.000,00",
+    "FACTURA C\nPunto de venta 0001 - Comprobante 00000007\nCUIT emisor: 20-11111111-2\nFecha de emision: 15/02/2026\n\nDetalle:\n- Servicios de consultoria en software | Cantidad 1,00 | Precio unitario 1.000.000,00\n\nTOTAL: $ 1.000.000,00",
+    "FACTURA C\nPunto de venta 0001 - Comprobante 00000008\nCUIT emisor: 20-11111111-2\nFecha de emision: 15/01/2026\n\nDetalle:\n- Servicios de consultoria en software | Cantidad 1,00 | Precio unitario 1.000.000,00\n\nTOTAL: $ 1.000.000,00",
+    "FACTURA C\nPunto de venta 0001 - Comprobante 00000009\nCUIT emisor: 20-11111111-2\nFecha de emision: 15/12/2025\n\nDetalle:\n- Servicios de consultoria en software | Cantidad 1,00 | Precio unitario 1.000.000,00\n\nTOTAL: $ 1.000.000,00",
+    "FACTURA C\nPunto de venta 0001 - Comprobante 00000010\nCUIT emisor: 20-11111111-2\nFecha de emision: 15/11/2025\n\nDetalle:\n- Servicios de consultoria en software | Cantidad 1,00 | Precio unitario 1.000.000,00\n\nTOTAL: $ 1.000.000,00",
+    "FACTURA C\nPunto de venta 0001 - Comprobante 00000011\nCUIT emisor: 20-11111111-2\nFecha de emision: 15/10/2025\n\nDetalle:\n- Servicios de consultoria en software | Cantidad 1,00 | Precio unitario 1.009.410,45\n\nTOTAL: $ 1.009.410,45"
+  ],
+  "expected": {
+    "route": "review",
+    "risk_level": "medium",
+    "computed_category": "A",
+    "issue_codes": [],
+    "rationale": "11 x 1,000,000 + 1,009,410.45 = 12,009,410.45, exactly the A cap. Caps are inclusive, so the category is still A, and the amount is above 90% of it: NEAR_REGISTERED_CAP."
+  }
+}

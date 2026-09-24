@@ -1,0 +1,212 @@
+{
+  "id": "unknown_taxpayer",
+  "description": "A valid CUIT that is not in the registry.",
+  "today": "2026-09-24",
+  "taxpayer_cuit": "23-33333333-3",
+  "registry_entry": null,
+  "invoices": [
+    {
+      "number": "0001-00000000",
+      "issuer_cuit": "23-33333333-3",
+      "issue_date": "2026-09-15",
+      "items": [
+        {
+          "description": "Servicios de consultoria en software",
+          "quantity": "1",
+          "unit_price": "800000",
+          "total": "800000",
+          "kind": "service"
+        }
+      ],
+      "total": "800000"
+    },
+    {
+      "number": "0001-00000001",
+      "issuer_cuit": "23-33333333-3",
+      "issue_date": "2026-08-15",
+      "items": [
+        {
+          "description": "Servicios de consultoria en software",
+          "quantity": "1",
+          "unit_price": "800000",
+          "total": "800000",
+          "kind": "service"
+        }
+      ],
+      "total": "800000"
+    },
+    {
+      "number": "0001-00000002",
+      "issuer_cuit": "23-33333333-3",
+      "issue_date": "2026-07-15",
+      "items": [
+        {
+          "description": "Servicios de consultoria en software",
+          "quantity": "1",
+          "unit_price": "800000",
+          "total": "800000",
+          "kind": "service"
+        }
+      ],
+      "total": "800000"
+    },
+    {
+      "number": "0001-00000003",
+      "issuer_cuit": "23-33333333-3",
+      "issue_date": "2026-06-15",
+      "items": [
+        {
+          "description": "Servicios de consultoria en software",
+          "quantity": "1",
+          "unit_price": "800000",
+          "total": "800000",
+          "kind": "service"
+        }
+      ],
+      "total": "800000"
+    },
+    {
+      "number": "0001-00000004",
+      "issuer_cuit": "23-33333333-3",
+      "issue_date": "2026-05-15",
+      "items": [
+        {
+          "description": "Servicios de consultoria en software",
+          "quantity": "1",
+          "unit_price": "800000",
+          "total": "800000",
+          "kind": "service"
+        }
+      ],
+      "total": "800000"
+    },
+    {
+      "number": "0001-00000005",
+      "issuer_cuit": "23-33333333-3",
+      "issue_date": "2026-04-15",
+      "items": [
+        {
+          "description": "Servicios de consultoria en software",
+          "quantity": "1",
+          "unit_price": "800000",
+          "total": "800000",
+          "kind": "service"
+        }
+      ],
+      "total": "800000"
+    },
+    {
+      "number": "0001-00000006",
+      "issuer_cuit": "23-33333333-3",
+      "issue_date": "2026-03-15",
+      "items": [
+        {
+          "description": "Servicios de consultoria en software",
+          "quantity": "1",
+          "unit_price": "800000",
+          "total": "800000",
+          "kind": "service"
+        }
+      ],
+      "total": "800000"
+    },
+    {
+      "number": "0001-00000007",
+      "issuer_cuit": "23-33333333-3",
+      "issue_date": "2026-02-15",
+      "items": [
+        {
+          "description": "Servicios de consultoria en software",
+          "quantity": "1",
+          "unit_price": "800000",
+          "total": "800000",
+          "kind": "service"
+        }
+      ],
+      "total": "800000"
+    },
+    {
+      "number": "0001-00000008",
+      "issuer_cuit": "23-33333333-3",
+      "issue_date": "2026-01-15",
+      "items": [
+        {
+          "description": "Servicios de consultoria en software",
+          "quantity": "1",
+          "unit_price": "800000",
+          "total": "800000",
+          "kind": "service"
+        }
+      ],
+      "total": "800000"
+    },
+    {
+      "number": "0001-00000009",
+      "issuer_cuit": "23-33333333-3",
+      "issue_date": "2025-12-15",
+      "items": [
+        {
+          "description": "Servicios de consultoria en software",
+          "quantity": "1",
+          "unit_price": "800000",
+          "total": "800000",
+          "kind": "service"
+        }
+      ],
+      "total": "800000"
+    },
+    {
+      "number": "0001-00000010",
+      "issuer_cuit": "23-33333333-3",
+      "issue_date": "2025-11-15",
+      "items": [
+        {
+          "description": "Servicios de consultoria en software",
+          "quantity": "1",
+          "unit_price": "800000",
+          "total": "800000",
+          "kind": "service"
+        }
+      ],
+      "total": "800000"
+    },
+    {
+      "number": "0001-00000011",
+      "issuer_cuit": "23-33333333-3",
+      "issue_date": "2025-10-15",
+      "items": [
+        {
+          "description": "Servicios de consultoria en software",
+          "quantity": "1",
+          "unit_price": "800000",
+          "total": "800000",
+          "kind": "service"
+        }
+      ],
+      "total": "800000"
+    }
+  ],
+  "invoice_texts": [
+    "FACTURA C\nPunto de venta 0001 - Comprobante 00000000\nCUIT emisor: 23-33333333-3\nFecha de emision: 15/09/2026\n\nDetalle:\n- Servicios de consultoria en software | Cantidad 1,00 | Precio unitario 800.000,00\n\nTOTAL: $ 800.000,00",
+    "FACTURA C\nPunto de venta 0001 - Comprobante 00000001\nCUIT emisor: 23-33333333-3\nFecha de emision: 15/08/2026\n\nDetalle:\n- Servicios de consultoria en software | Cantidad 1,00 | Precio unitario 800.000,00\n\nTOTAL: $ 800.000,00",
+    "FACTURA C\nPunto de venta 0001 - Comprobante 00000002\nCUIT emisor: 23-33333333-3\nFecha de emision: 15/07/2026\n\nDetalle:\n- Servicios de consultoria en software | Cantidad 1,00 | Precio unitario 800.000,00\n\nTOTAL: $ 800.000,00",
+    "FACTURA C\nPunto de venta 0001 - Comprobante 00000003\nCUIT emisor: 23-33333333-3\nFecha de emision: 15/06/2026\n\nDetalle:\n- Servicios de consultoria en software | Cantidad 1,00 | Precio unitario 800.000,00\n\nTOTAL: $ 800.000,00",
+    "FACTURA C\nPunto de venta 0001 - Comprobante 00000004\nCUIT emisor: 23-33333333-3\nFecha de emision: 15/05/2026\n\nDetalle:\n- Servicios de consultoria en software | Cantidad 1,00 | Precio unitario 800.000,00\n\nTOTAL: $ 800.000,00",
+    "FACTURA C\nPunto de venta 0001 - Comprobante 00000005\nCUIT emisor: 23-33333333-3\nFecha de emision: 15/04/2026\n\nDetalle:\n- Servicios de consultoria en software | Cantidad 1,00 | Precio unitario 800.000,00\n\nTOTAL: $ 800.000,00",
+    "FACTURA C\nPunto de venta 0001 - Comprobante 00000006\nCUIT emisor: 23-33333333-3\nFecha de emision: 15/03/2026\n\nDetalle:\n- Servicios de consultoria en software | Cantidad 1,00 | Precio unitario 800.000,00\n\nTOTAL: $ 800.000,00",
+    "FACTURA C\nPunto de venta 0001 - Comprobante 00000007\nCUIT emisor: 23-33333333-3\nFecha de emision: 15/02/2026\n\nDetalle:\n- Servicios de consultoria en software | Cantidad 1,00 | Precio unitario 800.000,00\n\nTOTAL: $ 800.000,00",
+    "FACTURA C\nPunto de venta 0001 - Comprobante 00000008\nCUIT emisor: 23-33333333-3\nFecha de emision: 15/01/2026\n\nDetalle:\n- Servicios de consultoria en software | Cantidad 1,00 | Precio unitario 800.000,00\n\nTOTAL: $ 800.000,00",
+    "FACTURA C\nPunto de venta 0001 - Comprobante 00000009\nCUIT emisor: 23-33333333-3\nFecha de emision: 15/12/2025\n\nDetalle:\n- Servicios de consultoria en software | Cantidad 1,00 | Precio unitario 800.000,00\n\nTOTAL: $ 800.000,00",
+    "FACTURA C\nPunto de venta 0001 - Comprobante 00000010\nCUIT emisor: 23-33333333-3\nFecha de emision: 15/11/2025\n\nDetalle:\n- Servicios de consultoria en software | Cantidad 1,00 | Precio unitario 800.000,00\n\nTOTAL: $ 800.000,00",
+    "FACTURA C\nPunto de venta 0001 - Comprobante 00000011\nCUIT emisor: 23-33333333-3\nFecha de emision: 15/10/2025\n\nDetalle:\n- Servicios de consultoria en software | Cantidad 1,00 | Precio unitario 800.000,00\n\nTOTAL: $ 800.000,00"
+  ],
+  "expected": {
+    "route": "review",
+    "risk_level": "low",
+    "computed_category": "A",
+    "issue_codes": [
+      "TAXPAYER_NOT_FOUND"
+    ],
+    "rationale": "23-33333333-3 passes the check digit (sum 118, remainder 8, digit 3) but is absent from the registry. Without a registered category the comparisons are skipped, leaving low risk, and the missing profile escalates."
+  }
+}

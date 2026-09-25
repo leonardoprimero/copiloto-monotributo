@@ -228,3 +228,25 @@ class TestWhenThePadronSaysNo:
             registry.lookup("20-00000051-6")
 
         assert error.value.reasons
+
+
+class TestDefaultTicketCachePath:
+    def test_falls_back_to_home_cache(self, monkeypatch, tmp_path: Path) -> None:
+        from copiloto.arca.client import default_ticket_cache_path
+
+        monkeypatch.delenv("XDG_CACHE_HOME", raising=False)
+        monkeypatch.setattr(Path, "home", lambda: tmp_path)
+
+        path = default_ticket_cache_path()
+
+        assert path == tmp_path / ".cache" / "copiloto" / "tickets.json"
+
+    def test_honors_xdg_cache_home(self, monkeypatch, tmp_path: Path) -> None:
+        from copiloto.arca.client import default_ticket_cache_path
+
+        custom_cache = tmp_path / "custom-cache"
+        monkeypatch.setenv("XDG_CACHE_HOME", str(custom_cache))
+
+        path = default_ticket_cache_path()
+
+        assert path == custom_cache / "copiloto" / "tickets.json"

@@ -9,6 +9,7 @@ writes one call instead of wiring four, and so the wiring itself is somewhere
 it can be read.
 """
 
+import os
 import warnings
 from collections.abc import Callable
 from datetime import datetime
@@ -60,6 +61,16 @@ def _says_not_found(fault: str) -> bool:
 
 def _normalised(text: str) -> str:
     return " ".join(text.split()).rstrip(".").casefold()
+
+
+def default_ticket_cache_path() -> Path:
+    """The default path to persist WSAA tickets for CLI and Web.
+
+    Respects XDG_CACHE_HOME if set, otherwise ~/.cache/copiloto/tickets.json.
+    """
+    cache_home = os.environ.get("XDG_CACHE_HOME")
+    base = Path(cache_home) if cache_home else Path.home() / ".cache"
+    return base / "copiloto" / "tickets.json"
 
 
 def build_registry(

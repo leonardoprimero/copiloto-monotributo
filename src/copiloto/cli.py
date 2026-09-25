@@ -22,6 +22,7 @@ from copiloto.analysis import RiskPolicy
 from copiloto.cuit import is_valid_cuit
 from copiloto.evals.schema import EvalCase
 from copiloto.extractors.protocol import ExtractionError
+from copiloto.extractors.resolve import default_extractor_mode, detected_cli_name
 from copiloto.extractors.select import build_extractor_factory
 from copiloto.graph.checkpoints import open_checkpointer
 from copiloto.models import DeclaredParameters, HumanDecision, TaxpayerProfile, Verdict
@@ -371,11 +372,16 @@ def _serve(args: argparse.Namespace) -> int:
     from copiloto.web.app import WebSettings, create_app  # noqa: PLC0415
 
     token = os.environ.get("COPILOTO_TOKEN") or None
+    cli_name = detected_cli_name() if args.extractor == "cli" else None
     settings = WebSettings(
-        state_db=Path(args.state_db), extractor_mode=args.extractor, access_token=token
+        state_db=Path(args.state_db),
+        extractor_mode=args.extractor,
+        cli_name=cli_name,
+        access_token=token,
     )
     print(f"Copiloto de monotributo en http://{args.host}:{args.port}")
-    print(f"Casos guardados en {args.state_db}. Lector de facturas: {args.extractor}.")
+    cli_suffix = f" ({cli_name})" if cli_name else ""
+    print(f"Casos guardados en {args.state_db}. Lector de facturas: {args.extractor}{cli_suffix}.")
     if args.extractor == "fake":
         print("En modo fake solo corren los ejemplos; para facturas reales usá --extractor cli o api.")
     if token:
@@ -526,7 +532,7 @@ def main(argv: list[str] | None = None) -> int:
     serve.add_argument(
         "--extractor",
         choices=("fake", "cli", "api"),
-        default=os.environ.get("COPILOTO_EXTRACTOR", "fake"),
+        default=default_extractor_mode(),
         help="fake: solo ejemplos. cli: tu herramienta de IA. api: con clave de proveedor.",
     )
 

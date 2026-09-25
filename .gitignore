@@ -14,3 +14,6 @@ __pycache__/
 
 # Case checkpoints written by `copiloto serve` and --state-db
 *.sqlite
+*.sqlite-shm
+*.sqlite-wal
+

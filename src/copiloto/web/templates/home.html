@@ -26,7 +26,7 @@
       (tu herramienta de IA, sin clave) o <code>COPILOTO_EXTRACTOR=api</code>.
     </div>
     {% else %}
-    <p class="muted">Lector de facturas: <code>{{ extractor_mode }}</code>.</p>
+    <p class="muted">Lector de facturas: <code>{{ extractor_mode }}</code>{% if cli_name %} (<code>{{ cli_name }}</code>){% endif %}.</p>
     {% endif %}
 
     <form method="post" action="/casos" enctype="multipart/form-data" class="form">

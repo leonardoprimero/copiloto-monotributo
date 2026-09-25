@@ -109,3 +109,31 @@ class TestAdapterDefinitions:
         assert KNOWN_CLI_ADAPTERS["claude"] == ["claude", "-p"]
         assert KNOWN_CLI_ADAPTERS["agy"] == ["agy", "-p"]
         assert KNOWN_CLI_ADAPTERS["gemini"] == ["gemini", "-p"]
+
+
+class TestDefaultExtractorMode:
+    def test_explicit_env_wins(self) -> None:
+        from copiloto.extractors.resolve import default_extractor_mode
+
+        assert default_extractor_mode(env={"COPILOTO_EXTRACTOR": "api"}, which=only("claude")) == "api"
+        assert default_extractor_mode(env={"COPILOTO_EXTRACTOR": "fake"}, which=only("claude")) == "fake"
+
+    def test_defaults_to_cli_when_a_tool_is_installed(self) -> None:
+        from copiloto.extractors.resolve import default_extractor_mode
+
+        assert default_extractor_mode(env={}, which=only("claude")) == "cli"
+        assert default_extractor_mode(env={}, which=only("codex")) == "cli"
+        assert default_extractor_mode(env={}, which=only("agy")) == "cli"
+        assert default_extractor_mode(env={}, which=only("gemini")) == "cli"
+
+    def test_defaults_to_fake_when_no_tool_is_installed(self) -> None:
+        from copiloto.extractors.resolve import default_extractor_mode
+
+        assert default_extractor_mode(env={}, which=only()) == "fake"
+
+    def test_detects_cli_name(self) -> None:
+        from copiloto.extractors.resolve import detected_cli_name
+
+        assert detected_cli_name(env={}, which=only("claude")) == "claude"
+        assert detected_cli_name(env={"COPILOTO_CLI": "agy"}, which=only("agy", "claude")) == "agy"
+        assert detected_cli_name(env={}, which=only()) is None

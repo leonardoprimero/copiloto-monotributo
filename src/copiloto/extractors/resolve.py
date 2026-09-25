@@ -15,6 +15,7 @@ Any other tool is reachable through COPILOTO_EXTRACTOR_CMD without this file
 changing at all.
 """
 
+import os
 import shlex
 import shutil
 from collections.abc import Callable, Mapping
@@ -73,3 +74,50 @@ def resolve_cli_argv(*, env: Mapping[str, str], which: Which | None = None) -> l
             return list(argv)
 
     raise ExtractionError(_NO_CLI_MESSAGE)
+
+
+def detected_cli_name(
+    *, env: Mapping[str, str] | None = None, which: Which | None = None
+) -> str | None:
+    """Return the name of the AI CLI that would be used, if any."""
+    env = os.environ if env is None else env
+    which = which or shutil.which
+
+    explicit_cmd = env.get("COPILOTO_EXTRACTOR_CMD", "").strip()
+    if explicit_cmd:
+        parts = shlex.split(explicit_cmd)
+        return parts[0] if parts else None
+
+    chosen = env.get("COPILOTO_CLI", "").strip()
+    if chosen:
+        if chosen in KNOWN_CLI_ADAPTERS and which(chosen) is not None:
+            return chosen
+        return None
+
+    for name in KNOWN_CLI_ADAPTERS:
+        if which(name) is not None:
+            return name
+
+    return None
+
+
+def default_extractor_mode(
+    *, env: Mapping[str, str] | None = None, which: Which | None = None
+) -> str:
+    """Determine the default extractor mode ('cli' or 'fake').
+
+    Respects COPILOTO_EXTRACTOR if set. Otherwise, defaults to 'cli' if
+    any known AI CLI is found on PATH (or COPILOTO_EXTRACTOR_CMD is set),
+    or 'fake' if none is found.
+    """
+    env = os.environ if env is None else env
+
+    explicit = env.get("COPILOTO_EXTRACTOR", "").strip().lower()
+    if explicit:
+        return explicit
+
+    if detected_cli_name(env=env, which=which) is not None:
+        return "cli"
+
+    return "fake"
+

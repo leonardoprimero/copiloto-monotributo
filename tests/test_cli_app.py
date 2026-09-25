@@ -146,3 +146,48 @@ class TestLanguage:
 
         assert any("Veredicto" in p for p in prompts)
         assert any("Notas" in p for p in prompts)
+
+
+class TestServeArguments:
+    def test_serve_defaults_to_cli_when_a_tool_is_installed(self, monkeypatch) -> None:
+        import uvicorn
+        from copiloto.web.app import WebSettings
+
+        captured: list[WebSettings] = []
+        monkeypatch.setattr(uvicorn, "run", lambda *a, **kw: 0)
+        monkeypatch.delenv("COPILOTO_EXTRACTOR", raising=False)
+        monkeypatch.setattr("shutil.which", lambda name: f"/bin/{name}" if name == "claude" else None)
+
+        def mock_create_app(settings: WebSettings):
+            captured.append(settings)
+            return None
+
+        monkeypatch.setattr("copiloto.web.app.create_app", mock_create_app)
+
+        code = run(["serve"])
+        assert code == 0
+        assert len(captured) == 1
+        assert captured[0].extractor_mode == "cli"
+        assert captured[0].cli_name == "claude"
+
+    def test_serve_defaults_to_fake_when_no_tool_is_installed(self, monkeypatch) -> None:
+        import uvicorn
+        from copiloto.web.app import WebSettings
+
+        captured: list[WebSettings] = []
+        monkeypatch.setattr(uvicorn, "run", lambda *a, **kw: 0)
+        monkeypatch.delenv("COPILOTO_EXTRACTOR", raising=False)
+        monkeypatch.setattr("shutil.which", lambda _name: None)
+
+        def mock_create_app(settings: WebSettings):
+            captured.append(settings)
+            return None
+
+        monkeypatch.setattr("copiloto.web.app.create_app", mock_create_app)
+
+        code = run(["serve"])
+        assert code == 0
+        assert len(captured) == 1
+        assert captured[0].extractor_mode == "fake"
+        assert captured[0].cli_name is None
+

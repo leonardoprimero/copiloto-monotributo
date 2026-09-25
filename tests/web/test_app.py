@@ -99,6 +99,19 @@ class TestHome:
         for field in ("cuit", "category", "invoices", "surface_m2", "energy_kwh", "annual_rent"):
             assert f'name="{field}"' in page.text
 
+    def test_shows_detected_cli_tool_name_in_cli_mode(self) -> None:
+        settings = WebSettings(
+            state_db=None,
+            extractor_mode="cli",
+            cli_name="claude",
+            extractor_factory=lambda _case: FakeExtractor(mapping_for(rendered_texts())),
+            clock=lambda: TODAY,
+        )
+        client = TestClient(create_app(settings), follow_redirects=True)
+        page = client.get("/")
+
+        assert "Lector de facturas: <code>cli</code> (<code>claude</code>)" in page.text
+
 
 class TestExamples:
     def test_a_calm_example_lands_on_its_report(self, client: TestClient) -> None:

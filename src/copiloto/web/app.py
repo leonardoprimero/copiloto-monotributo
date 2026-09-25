@@ -32,6 +32,7 @@ from copiloto.analysis import RiskPolicy
 from copiloto.cuit import is_valid_cuit
 from copiloto.evals.schema import EvalCase
 from copiloto.extractors.protocol import ExtractionError
+from copiloto.extractors.resolve import detected_cli_name
 from copiloto.extractors.select import ExtractorFactory, build_extractor_factory, fake_for
 from copiloto.graph.checkpoints import open_checkpointer
 from copiloto.models import DeclaredParameters, HumanDecision, TaxpayerProfile, Verdict
@@ -112,6 +113,7 @@ class WebSettings:
 
     state_db: Path | None = None
     extractor_mode: str = "fake"
+    cli_name: str | None = None
     extractor_factory: ExtractorFactory | None = None
     clock: Callable[[], date] = date.today
     cases_dir: Path = CASES_DIR
@@ -289,6 +291,10 @@ def create_app(settings: WebSettings) -> FastAPI:
         )
 
     def home(request: Request, *, status: int = 200, error: str | None = None, form: dict | None = None):
+        cli_name = settings.cli_name
+        if cli_name is None and settings.extractor_mode == "cli" and settings.extractor_factory is None:
+            cli_name = detected_cli_name()
+
         return render(
             request,
             "home.html",
@@ -299,6 +305,7 @@ def create_app(settings: WebSettings) -> FastAPI:
             examples=list(examples.values()),
             cases=[summary_view(s) for s in service.list_cases()],
             extractor_mode=settings.extractor_mode,
+            cli_name=cli_name,
             offline=settings.extractor_factory is None and settings.extractor_mode == "fake",
             arca_enabled=settings.arca_registry is not None,
         )

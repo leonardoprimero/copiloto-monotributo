@@ -29,6 +29,7 @@ would ask WSAA again and be refused until the ticket expires.
 
 import json
 import os
+import stat
 import tempfile
 import time
 from datetime import datetime
@@ -40,6 +41,17 @@ try:
     import fcntl
 except ImportError:  # pragma: no cover - Windows has no flock; writers are not serialised there
     fcntl = None
+
+# How the lock file is opened: created owner-only if missing, never through a
+# symlink, never inherited by children, and without blocking on a planted
+# FIFO. The two flags Windows lacks fall back to nothing there.
+_LOCK_FLAGS = (
+    os.O_RDONLY
+    | os.O_CREAT
+    | os.O_NONBLOCK
+    | getattr(os, "O_NOFOLLOW", 0)
+    | getattr(os, "O_CLOEXEC", 0)
+)
 
 
 class TicketCache:
@@ -78,7 +90,7 @@ class TicketCache:
             entry = tickets.get(self._key(None))
         return _ticket_from(entry) if entry is not None else None
 
-    def save(self, ticket: AccessTicket) -> None:
+    def save(self, ticket: AccessTicket, *, now: datetime | None = None) -> None:
         """Record this ticket for this certificate, keeping the others, atomically.
 
         Read, add, write: two processes doing that at once would each read
@@ -86,14 +98,22 @@ class TicketCache:
         A lock on a sibling file serialises them. A writer that never lets go
         is given up on after `lock_wait` seconds with an OSError, the same
         failure as any other write: the ticket stays in memory.
+
+        With `now`, entries that have already expired are dropped on the way,
+        so the file does not grow with every certificate that ever used it.
         """
         self._path.parent.mkdir(parents=True, exist_ok=True)
         lock = self._path.with_name(f".{self._path.name}.lock")
-        descriptor = os.open(lock, os.O_RDONLY | os.O_CREAT | os.O_NOFOLLOW | os.O_CLOEXEC, 0o600)
+        descriptor = os.open(lock, _LOCK_FLAGS, 0o600)
         try:
+            if not stat.S_ISREG(os.fstat(descriptor).st_mode):
+                raise OSError(f"The ticket cache lock {lock} is not a regular file.")
             self._acquire(descriptor, lock)
+            mine = self._key(self._certificate)
             tickets = self._read()
-            tickets[self._key(self._certificate)] = {
+            if now is not None:
+                tickets = {k: v for k, v in tickets.items() if k == mine or _is_live(v, now)}
+            tickets[mine] = {
                 "token": ticket.token,
                 "sign": ticket.sign,
                 "expires_at": ticket.expires_at.isoformat(),
@@ -180,6 +200,12 @@ def _ticket_from(entry: object) -> AccessTicket | None:
         # TypeError in the middle of a lookup.
         return None
     return AccessTicket(token=token, sign=sign, expires_at=expires_at)
+
+
+def _is_live(entry: object, now: datetime) -> bool:
+    """Whether a saved entry is still worth keeping at `now`."""
+    ticket = _ticket_from(entry)
+    return ticket is not None and ticket.expires_at > now
 
 
 def _fsync_directory(directory: Path) -> None:

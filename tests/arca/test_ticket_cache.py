@@ -11,6 +11,7 @@ treated as absent rather than trusted.
 """
 
 import json
+import os
 import stat
 import threading
 from datetime import UTC, datetime, timedelta
@@ -196,6 +197,27 @@ class TestItIsNotTrustedBlindly:
                 TicketCache(
                     path, environment=HOMOLOGACION, service=SERVICE, certificate="x", lock_wait=0.2
                 ).save(TICKET)
+
+    def test_a_planted_fifo_is_refused_instead_of_waited_on(self, path: Path) -> None:
+        """Opening a FIFO for reading blocks until somebody writes. Nobody will."""
+        os.mkfifo(path.with_name(f".{path.name}.lock"))
+
+        with pytest.raises(OSError, match="regular file"):
+            cache(path).save(TICKET)
+
+    def test_expired_tickets_of_other_certificates_are_dropped_on_save(
+        self, path: Path
+    ) -> None:
+        """Otherwise the file grows with every certificate that ever used it."""
+        other = AccessTicket(token="otro", sign="otra", expires_at=NOW + timedelta(hours=6))  # noqa: S106
+        cache(path, certificate="huella-1").save(TICKET)
+
+        cache(path, certificate="huella-2").save(other, now=NOW + timedelta(hours=1))
+        assert cache(path, certificate="huella-1").load() == TICKET, "still valid: kept"
+
+        cache(path, certificate="huella-2").save(other, now=NOW + timedelta(hours=13))
+        assert cache(path, certificate="huella-1").load() is None, "expired: dropped"
+        assert cache(path, certificate="huella-2").load() == other
 
     def test_a_planted_lock_path_is_not_followed(self, path: Path) -> None:
         victim = path.parent / "victima"

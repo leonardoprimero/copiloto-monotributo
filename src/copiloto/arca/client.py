@@ -55,7 +55,11 @@ def _says_not_found(fault: str) -> bool:
     and a trailing period are the kind of thing that drifts, and treating the
     drifted version as a failure would turn "unknown CUIT" into an error.
     """
-    return " ".join(fault.split()).rstrip(".").casefold() == NOT_FOUND.casefold()
+    return _normalised(fault) == _normalised(NOT_FOUND)
+
+
+def _normalised(text: str) -> str:
+    return " ".join(text.split()).rstrip(".").casefold()
 
 
 def build_registry(
@@ -112,7 +116,7 @@ def build_registry(
             # WSAA has already issued this ticket and will not issue another for
             # twelve hours. A cache that cannot be written must not lose it.
             try:
-                cache.save(ticket)
+                cache.save(ticket, now=now)
             except OSError as error:
                 warnings.warn(
                     f"The access ticket could not be saved to {ticket_cache}: {error}. "

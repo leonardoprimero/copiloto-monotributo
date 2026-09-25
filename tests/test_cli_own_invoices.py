@@ -403,3 +403,155 @@ def _factory_for(text_to_month: dict[str, int]):
             total=amount,
         )
     return lambda _mode: (lambda _case: FakeExtractor(mapping))
+
+
+class TestCliArca:
+    def test_arca_requires_credentials_if_not_in_env(
+        self, folder: Path, capsys, monkeypatch
+    ) -> None:
+        monkeypatch.delenv("COPILOTO_ARCA_CERT", raising=False)
+        monkeypatch.delenv("COPILOTO_ARCA_KEY", raising=False)
+        monkeypatch.delenv("COPILOTO_ARCA_CUIT", raising=False)
+        code = main(
+            [
+                "run",
+                "--invoices-dir",
+                str(folder),
+                "--cuit",
+                "20-11111111-2",
+                "--arca",
+            ]
+        )
+        assert code == 2
+        err = capsys.readouterr().err
+        assert "--arca-cert" in err
+        assert "--arca-key" in err
+        assert "--arca-cuit" in err
+
+    def test_arca_allows_omitting_category(
+        self, folder: Path, capsys, monkeypatch
+    ) -> None:
+        from copiloto.models import TaxpayerProfile
+        from copiloto.registry import MockArcaRegistry
+
+        monkeypatch.setattr(
+            "copiloto.cli.build_extractor_factory", _mapping_factory(folder)
+        )
+        fake_reg = MockArcaRegistry(
+            {"20-11111111-2": TaxpayerProfile(cuit="20-11111111-2", name="Test", category="A")}
+        )
+        monkeypatch.setattr(
+            "copiloto.arca.client.build_registry", lambda **_kw: fake_reg
+        )
+
+        code = main(
+            [
+                "run",
+                "--invoices-dir",
+                str(folder),
+                "--cuit",
+                "20-11111111-2",
+                "--arca",
+                "--arca-cert",
+                "cert.pem",
+                "--arca-key",
+                "key.pem",
+                "--arca-cuit",
+                "20-11111111-2",
+                "--extractor",
+                "cli",
+                "--today",
+                "2026-09-24",
+            ]
+        )
+        captured = capsys.readouterr()
+        assert code == 0
+        assert "--category" not in captured.err
+        assert "Categoría registrada: A" in captured.out
+
+    def test_arca_reports_missing_extra(
+        self, folder: Path, capsys, monkeypatch
+    ) -> None:
+        import sys
+
+        monkeypatch.setitem(sys.modules, "copiloto.arca.client", None)
+        code = main(
+            [
+                "run",
+                "--invoices-dir",
+                str(folder),
+                "--cuit",
+                "20-11111111-2",
+                "--arca",
+                "--arca-cert",
+                "cert.pem",
+                "--arca-key",
+                "key.pem",
+                "--arca-cuit",
+                "20-11111111-2",
+            ]
+        )
+        assert code == 2
+        err = capsys.readouterr().err
+        assert "uv sync --extra arca" in err
+
+    def test_arca_wires_build_registry(
+        self, folder: Path, capsys, monkeypatch, tmp_path: Path
+    ) -> None:
+        from unittest.mock import MagicMock
+
+        mock_registry = MagicMock()
+        mock_build = MagicMock(return_value=mock_registry)
+        monkeypatch.setattr("copiloto.arca.client.build_registry", mock_build)
+        monkeypatch.setattr(
+            "copiloto.cli.build_extractor_factory", _mapping_factory(folder)
+        )
+
+        mock_start = MagicMock()
+        mock_outcome = MagicMock()
+        mock_outcome.report = "Report output"
+        mock_start.return_value = mock_outcome
+        monkeypatch.setattr("copiloto.service.Copilot.start", mock_start)
+
+        cert_file = tmp_path / "cert.pem"
+        key_file = tmp_path / "key.pem"
+        cache_file = tmp_path / "ticket_cache.json"
+
+        code = main(
+            [
+                "run",
+                "--invoices-dir",
+                str(folder),
+                "--cuit",
+                "20-11111111-2",
+                "--arca",
+                "--arca-cert",
+                str(cert_file),
+                "--arca-key",
+                str(key_file),
+                "--arca-cuit",
+                "20-99999999-4",
+                "--arca-env",
+                "homologacion",
+                "--arca-ticket-cache",
+                str(cache_file),
+                "--arca-passphrase",
+                "secret",
+                "--extractor",
+                "cli",
+                "--today",
+                "2026-09-24",
+            ]
+        )
+        assert code == 0
+        mock_build.assert_called_once_with(
+            cert_path=cert_file,
+            key_path=key_file,
+            represented_cuit="20-99999999-4",
+            environment="homologacion",
+            ticket_cache=cache_file,
+            passphrase=b"secret",
+        )
+        mock_start.assert_called_once()
+        assert mock_start.call_args.kwargs["registry"] is mock_registry
+

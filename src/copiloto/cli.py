@@ -175,15 +175,33 @@ def _validate_own_invoice_args(args: argparse.Namespace, scales: Scales) -> str 
         return "Con --invoices-dir necesito --cuit: el CUIT del contribuyente."
     if not is_valid_cuit(args.cuit):
         return f"El CUIT {args.cuit} no pasa el dígito verificador."
-    if not args.category:
-        return (
-            "Con --invoices-dir necesito --category: la categoría en la que estás "
-            "registrado. La tenés en tu credencial o en el pago mensual."
-        )
 
-    names = [c.name for c in scales.categories]
-    if args.category not in names:
-        return f"La categoría {args.category} no existe. Son: {', '.join(names)}."
+    if args.arca:
+        if not (args.arca_cert and args.arca_key and args.arca_cuit):
+            return (
+                "Con --arca necesito el certificado (--arca-cert), la clave privada "
+                "(--arca-key) y el CUIT representado (--arca-cuit), o las variables "
+                "COPILOTO_ARCA_*."
+            )
+        try:
+            import copiloto.arca.client  # noqa: F401
+        except ImportError:
+            return "El cliente de ARCA requiere instalar el extra opcional: uv sync --extra arca"
+
+        if args.category:
+            names = [c.name for c in scales.categories]
+            if args.category not in names:
+                return f"La categoría {args.category} no existe. Son: {', '.join(names)}."
+    else:
+        if not args.category:
+            return (
+                "Con --invoices-dir necesito --category: la categoría en la que estás "
+                "registrado. La tenés en tu credencial o en el pago mensual."
+            )
+
+        names = [c.name for c in scales.categories]
+        if args.category not in names:
+            return f"La categoría {args.category} no existe. Son: {', '.join(names)}."
 
     if args.extractor == "fake":
         return (
@@ -218,7 +236,19 @@ def _run(args: argparse.Namespace) -> int:
         source_issues = (scanned,) if scanned else ()
         case = None
         taxpayer_cuit = args.cuit
-        registry = _declared_registry(args.cuit, args.category)
+        if args.arca:
+            from copiloto.arca.client import build_registry
+
+            registry = build_registry(
+                cert_path=Path(args.arca_cert),
+                key_path=Path(args.arca_key),
+                represented_cuit=args.arca_cuit,
+                environment=args.arca_env,
+                ticket_cache=Path(args.arca_ticket_cache) if args.arca_ticket_cache else None,
+                passphrase=args.arca_passphrase.encode() if args.arca_passphrase else None,
+            )
+        else:
+            registry = _declared_registry(args.cuit, args.category)
         thread = f"cli-{Path(args.invoices_dir).name}"
         default_today = date.today()
     else:
@@ -414,6 +444,43 @@ def main(argv: list[str] | None = None) -> int:
         "--auto-resume",
         action="store_true",
         help="Reanudar sin preguntar. El informe aclara que nadie lo revisó.",
+    )
+    run.add_argument(
+        "--arca",
+        action="store_true",
+        default=os.environ.get("COPILOTO_ARCA") == "1",
+        help="Consultar el padrón real de ARCA en vez de usar la categoría declarada.",
+    )
+    run.add_argument(
+        "--arca-cert",
+        default=os.environ.get("COPILOTO_ARCA_CERT"),
+        help="Ruta al certificado X.509.",
+    )
+    run.add_argument(
+        "--arca-key",
+        default=os.environ.get("COPILOTO_ARCA_KEY"),
+        help="Ruta a la clave privada.",
+    )
+    run.add_argument(
+        "--arca-cuit",
+        default=os.environ.get("COPILOTO_ARCA_CUIT"),
+        help="CUIT representado.",
+    )
+    run.add_argument(
+        "--arca-env",
+        choices=("produccion", "homologacion"),
+        default=os.environ.get("COPILOTO_ARCA_ENV", "produccion"),
+        help="Ambiente de ARCA (produccion o homologacion).",
+    )
+    run.add_argument(
+        "--arca-ticket-cache",
+        default=os.environ.get("COPILOTO_ARCA_TICKET_CACHE"),
+        help="Ruta al archivo donde guardar el ticket de acceso WSAA.",
+    )
+    run.add_argument(
+        "--arca-passphrase",
+        default=os.environ.get("COPILOTO_ARCA_PASSPHRASE"),
+        help="Contraseña de la clave privada, si tiene.",
     )
     _add_state_arguments(run)
     run.add_argument(

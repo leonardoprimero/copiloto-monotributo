@@ -5,8 +5,15 @@ Este proyecto usa [versionado semántico](https://semver.org/lang/es/).
 
 ## [Sin publicar]
 
+## [0.5.0] - 2026-09-25
+
 ### Agregado
 
+- **Autodetección de IA local en la interfaz web:** `copiloto serve` ahora
+  autodetecta qué herramienta de IA tenés instalada (`codex`, `claude`, `agy` o
+  `gemini`) y arranca directamente en modo `cli` listo para procesar facturas
+  reales, sin requerir `COPILOTO_EXTRACTOR=cli` ni mostrar el cartel de modo
+  `fake`. Permite forzar una puntual con `COPILOTO_CLI`.
 - **Caché persistente por defecto para la CLI y la web:** con `--arca`, el ticket
   WSAA se guarda por defecto en `~/.cache/copiloto/tickets.json` (respetando
   `XDG_CACHE_HOME`), evitando pedir un ticket nuevo en cada invocación y recibir
@@ -200,7 +207,8 @@ Primera versión: el grafo completo, de las facturas al informe.
 - CI que prueba que un clone limpio corre todo sin API key, sin herramienta de
   IA y sin red.
 
-[Sin publicar]: https://github.com/leonardoprimero/copiloto-monotributo/compare/v0.4.0...HEAD
+[Sin publicar]: https://github.com/leonardoprimero/copiloto-monotributo/compare/v0.5.0...HEAD
+[0.5.0]: https://github.com/leonardoprimero/copiloto-monotributo/compare/v0.4.0...v0.5.0
 [0.4.0]: https://github.com/leonardoprimero/copiloto-monotributo/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/leonardoprimero/copiloto-monotributo/releases/tag/v0.3.0
 [0.2.0]: https://github.com/leonardoprimero/copiloto-monotributo/releases/tag/v0.2.0

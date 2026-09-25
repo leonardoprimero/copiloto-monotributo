@@ -195,8 +195,9 @@ copiloto run --invoices-dir ./facturas --cuit 20-11111111-2 --arca \
   --arca-cert certificado.pem \
   --arca-key clave.key \
   --arca-cuit 20-11111111-2 \
-  --arca-env homologacion \
-  --arca-ticket-cache ~/.arca/ticket.json
+  --arca-env homologacion
+  # Por defecto el ticket se guarda en ~/.cache/copiloto/tickets.json.
+  # Para deshabilitar la caché en disco: --no-arca-ticket-cache
 
 # O exportando variables para la web o la CLI:
 export COPILOTO_ARCA=1
@@ -204,9 +205,12 @@ export COPILOTO_ARCA_CERT=certificado.pem
 export COPILOTO_ARCA_KEY=clave.key
 export COPILOTO_ARCA_CUIT=20-11111111-2
 export COPILOTO_ARCA_ENV=homologacion
-export COPILOTO_ARCA_TICKET_CACHE=~/.arca/ticket.json
+# Opcional (por defecto usa ~/.cache/copiloto/tickets.json, o 'none' para desactivar):
+# export COPILOTO_ARCA_TICKET_CACHE=~/.arca/ticket.json
 copiloto serve
 ```
+
+Por defecto, el ticket de acceso WSAA se guarda en `~/.cache/copiloto/tickets.json` (respetando `XDG_CACHE_HOME`) para evitar bloqueos por `coe.alreadyAuthenticated` entre ejecuciones sucesivas. Si no se desea persistir a disco, se puede pasar `--no-arca-ticket-cache` o `COPILOTO_ARCA_TICKET_CACHE=none`.
 
 Si ARCA no emite la constancia (`ConstanciaUnavailable`) o la conexión falla (`PadronError`), el nodo de consulta emite una advertencia y deriva el caso a revisión con un contador.
 

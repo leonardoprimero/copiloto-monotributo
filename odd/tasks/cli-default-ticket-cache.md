@@ -22,13 +22,13 @@ A persistent default path solves this seamlessly, while `--no-arca-ticket-cache`
   - GREEN: Implement `default_ticket_cache_path()`.
   - Evidence: Commit `58dadcb`, 2 tests pass, pyright 0 errors.
 
-- [ ] `T2`: Wire default cache into CLI and Web with opt-out
+- [x] `T2`: Wire default cache into CLI and Web with opt-out
   - Route: Delegated direct (`src/copiloto/cli.py`, `src/copiloto/web/app.py`, `tests/test_cli_own_invoices.py`, `tests/web/test_app.py`).
   - RED: Tests asserting default cache path passed to `build_registry` and `--no-arca-ticket-cache` passing `None`.
   - GREEN: Update CLI argument parsing and WebSettings initialization.
-  - Checks: pytest + pyright. Commit unit.
+  - Evidence: Commit `73f8790`, 59 tests pass, pyright 0 errors.
 
-- [ ] `T3`: Documentation & Changelog
+- [x] `T3`: Documentation & Changelog
   - Route: Direct inline (`docs/configuration.md`, `docs/arca-padron.md`, `CHANGELOG.md`).
-  - Document the default ticket cache path and `--no-arca-ticket-cache` flag.
-  - Checks: full pytest suite + pyright. Commit unit.
+  - Documented the default ticket cache path and `--no-arca-ticket-cache` flag in configuration guide, ARCA padrón doc, and CHANGELOG.
+  - Evidence: Commit pending, 867 tests pass, pyright 0 errors.

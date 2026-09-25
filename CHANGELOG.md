@@ -5,6 +5,14 @@ Este proyecto usa [versionado semántico](https://semver.org/lang/es/).
 
 ## [Sin publicar]
 
+### Agregado
+
+- **Caché persistente por defecto para la CLI y la web:** con `--arca`, el ticket
+  WSAA se guarda por defecto en `~/.cache/copiloto/tickets.json` (respetando
+  `XDG_CACHE_HOME`), evitando pedir un ticket nuevo en cada invocación y recibir
+  `coe.alreadyAuthenticated`. Se puede desactivar con `--no-arca-ticket-cache` o
+  `COPILOTO_ARCA_TICKET_CACHE=none`.
+
 ## [0.4.0] - 2026-09-25
 
 El cliente del padrón corrió por primera vez contra ARCA, en homologación y con

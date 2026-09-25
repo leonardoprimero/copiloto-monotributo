@@ -108,7 +108,7 @@ Requiere `uv sync --extra arca` y un certificado digital emitido por ARCA (o WSA
 | `COPILOTO_ARCA_KEY` | `--arca-key` | requerido con `--arca` | Ruta a la clave privada `.key`. |
 | `COPILOTO_ARCA_CUIT` | `--arca-cuit` | requerido con `--arca` | CUIT representado (delegado en ARCA). |
 | `COPILOTO_ARCA_ENV` | `--arca-env` | `produccion` | Ambiente: `produccion` o `homologacion`. |
-| `COPILOTO_ARCA_TICKET_CACHE`| `--arca-ticket-cache` | en memoria | Ruta al archivo `.json` para persistir el ticket de acceso WSAA (12 h). |
+| `COPILOTO_ARCA_TICKET_CACHE`| `--arca-ticket-cache` | `~/.cache/copiloto/tickets.json` | Ruta al archivo `.json` para persistir el ticket de acceso WSAA (12 h). Pasar `none`, `0` o `--no-arca-ticket-cache` para solo memoria. |
 | `COPILOTO_ARCA_PASSPHRASE` | `--arca-passphrase` | vacía | Contraseña de la clave privada, si estuviera encriptada. |
 
 Si ARCA no puede emitir la constancia (`ConstanciaUnavailable`, por ejemplo por CUIT cancelada o falta de registro de datos biométricos) o el servicio falla (`PadronError`), el copiloto no se cae: genera una observación de severidad `warning` que deriva automáticamente el caso a revisión con un contador.

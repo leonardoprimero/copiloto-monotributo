@@ -249,17 +249,23 @@ uv sync --extra api     # extraer con una API de proveedor
 uv run copiloto serve
 ```
 
-Abre `http://127.0.0.1:8000`. La página de inicio tiene el formulario para tus
-facturas, los catorce ejemplos para probar sin modelo, y la lista de casos con
-su estado. Un caso derivado es una URL: el contador la abre cuando puede, ve la
-alerta con el margen y los motivos, elige confirmado o descartado, y recién
-entonces se escribe el informe. Los casos quedan en `copiloto-state.sqlite` en
-la carpeta actual (`--state-db` o `COPILOTO_STATE_DB` para cambiarlo).
+Abre `http://127.0.0.1:8000`. Si tenés una herramienta de IA instalada (`codex`,
+`claude`, `agy` o `gemini`), el servidor la detecta automáticamente y arranca
+en modo `cli` listo para procesar facturas reales sin configurar nada. Si no
+tenés ninguna instalada, arranca en modo `fake` para explorar los ejemplos.
 
-Para leer facturas reales desde la web, el servidor tiene que arrancar con un
-lector:
+La página de inicio tiene el formulario para tus facturas, los catorce ejemplos
+para probar sin modelo, y la lista de casos con su estado. Un caso derivado es
+una URL: el contador la abre cuando puede, ve la alerta con el margen y los
+motivos, elige confirmado o descartado, y recién entonces se escribe el informe.
+Los casos quedan en `copiloto-state.sqlite` en la carpeta actual (`--state-db`
+o `COPILOTO_STATE_DB` para cambiarlo).
+
+Si tenés varias herramientas y querés elegir una puntual, o fijar el extractor:
 
 ```sh
+COPILOTO_CLI=claude uv run copiloto serve
+# o fijando el modo explícito:
 COPILOTO_EXTRACTOR=cli uv run copiloto serve
 ```
 

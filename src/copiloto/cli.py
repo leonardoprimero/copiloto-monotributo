@@ -237,14 +237,25 @@ def _run(args: argparse.Namespace) -> int:
         case = None
         taxpayer_cuit = args.cuit
         if args.arca:
-            from copiloto.arca.client import build_registry
+            from copiloto.arca.client import build_registry, default_ticket_cache_path
+
+            if args.no_arca_ticket_cache:
+                cache_path = None
+            elif args.arca_ticket_cache:
+                cache_path = (
+                    None
+                    if args.arca_ticket_cache.lower() in ("none", "0", "false")
+                    else Path(args.arca_ticket_cache)
+                )
+            else:
+                cache_path = default_ticket_cache_path()
 
             registry = build_registry(
                 cert_path=Path(args.arca_cert),
                 key_path=Path(args.arca_key),
                 represented_cuit=args.arca_cuit,
                 environment=args.arca_env,
-                ticket_cache=Path(args.arca_ticket_cache) if args.arca_ticket_cache else None,
+                ticket_cache=cache_path,
                 passphrase=args.arca_passphrase.encode() if args.arca_passphrase else None,
             )
         else:
@@ -475,7 +486,12 @@ def main(argv: list[str] | None = None) -> int:
     run.add_argument(
         "--arca-ticket-cache",
         default=os.environ.get("COPILOTO_ARCA_TICKET_CACHE"),
-        help="Ruta al archivo donde guardar el ticket de acceso WSAA.",
+        help="Ruta al archivo donde guardar el ticket de acceso WSAA (por defecto ~/.cache/copiloto/tickets.json).",
+    )
+    run.add_argument(
+        "--no-arca-ticket-cache",
+        action="store_true",
+        help="No guardar el ticket en disco, manteniéndolo solo en memoria durante la ejecución.",
     )
     run.add_argument(
         "--arca-passphrase",

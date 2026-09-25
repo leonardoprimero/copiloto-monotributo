@@ -560,3 +560,141 @@ class TestCliArca:
         mock_start.assert_called_once()
         assert mock_start.call_args.kwargs["registry"] is mock_registry
 
+    @pytest.mark.skipif(not HAS_ARCA, reason="the arca extra is not installed")
+    def test_arca_defaults_to_persistent_ticket_cache(
+        self, folder: Path, capsys, monkeypatch, tmp_path: Path
+    ) -> None:
+        from unittest.mock import MagicMock
+        from copiloto.arca.client import default_ticket_cache_path
+
+        mock_registry = MagicMock()
+        mock_build = MagicMock(return_value=mock_registry)
+        monkeypatch.setattr("copiloto.arca.client.build_registry", mock_build)
+        monkeypatch.setattr(
+            "copiloto.cli.build_extractor_factory", _mapping_factory(folder)
+        )
+        mock_start = MagicMock()
+        mock_outcome = MagicMock()
+        mock_outcome.report = "Report output"
+        mock_start.return_value = mock_outcome
+        monkeypatch.setattr("copiloto.service.Copilot.start", mock_start)
+
+        cert_file = tmp_path / "cert.pem"
+        key_file = tmp_path / "key.pem"
+
+        code = main(
+            [
+                "run",
+                "--invoices-dir",
+                str(folder),
+                "--cuit",
+                "20-11111111-2",
+                "--arca",
+                "--arca-cert",
+                str(cert_file),
+                "--arca-key",
+                str(key_file),
+                "--arca-cuit",
+                "20-99999999-4",
+                "--extractor",
+                "cli",
+                "--today",
+                "2026-09-24",
+            ]
+        )
+        assert code == 0
+        assert mock_build.call_args.kwargs["ticket_cache"] == default_ticket_cache_path()
+
+    @pytest.mark.skipif(not HAS_ARCA, reason="the arca extra is not installed")
+    def test_arca_no_ticket_cache_flag_disables_cache(
+        self, folder: Path, capsys, monkeypatch, tmp_path: Path
+    ) -> None:
+        from unittest.mock import MagicMock
+
+        mock_registry = MagicMock()
+        mock_build = MagicMock(return_value=mock_registry)
+        monkeypatch.setattr("copiloto.arca.client.build_registry", mock_build)
+        monkeypatch.setattr(
+            "copiloto.cli.build_extractor_factory", _mapping_factory(folder)
+        )
+        mock_start = MagicMock()
+        mock_outcome = MagicMock()
+        mock_outcome.report = "Report output"
+        mock_start.return_value = mock_outcome
+        monkeypatch.setattr("copiloto.service.Copilot.start", mock_start)
+
+        cert_file = tmp_path / "cert.pem"
+        key_file = tmp_path / "key.pem"
+
+        code = main(
+            [
+                "run",
+                "--invoices-dir",
+                str(folder),
+                "--cuit",
+                "20-11111111-2",
+                "--arca",
+                "--arca-cert",
+                str(cert_file),
+                "--arca-key",
+                str(key_file),
+                "--arca-cuit",
+                "20-99999999-4",
+                "--no-arca-ticket-cache",
+                "--extractor",
+                "cli",
+                "--today",
+                "2026-09-24",
+            ]
+        )
+        assert code == 0
+        assert mock_build.call_args.kwargs["ticket_cache"] is None
+
+    @pytest.mark.skipif(not HAS_ARCA, reason="the arca extra is not installed")
+    @pytest.mark.parametrize("opt_out", ["none", "0", "false", "None", "FALSE"])
+    def test_arca_ticket_cache_opt_out_strings(
+        self, opt_out: str, folder: Path, capsys, monkeypatch, tmp_path: Path
+    ) -> None:
+        from unittest.mock import MagicMock
+
+        mock_registry = MagicMock()
+        mock_build = MagicMock(return_value=mock_registry)
+        monkeypatch.setattr("copiloto.arca.client.build_registry", mock_build)
+        monkeypatch.setattr(
+            "copiloto.cli.build_extractor_factory", _mapping_factory(folder)
+        )
+        mock_start = MagicMock()
+        mock_outcome = MagicMock()
+        mock_outcome.report = "Report output"
+        mock_start.return_value = mock_outcome
+        monkeypatch.setattr("copiloto.service.Copilot.start", mock_start)
+
+        cert_file = tmp_path / "cert.pem"
+        key_file = tmp_path / "key.pem"
+
+        code = main(
+            [
+                "run",
+                "--invoices-dir",
+                str(folder),
+                "--cuit",
+                "20-11111111-2",
+                "--arca",
+                "--arca-cert",
+                str(cert_file),
+                "--arca-key",
+                str(key_file),
+                "--arca-cuit",
+                "20-99999999-4",
+                "--arca-ticket-cache",
+                opt_out,
+                "--extractor",
+                "cli",
+                "--today",
+                "2026-09-24",
+            ]
+        )
+        assert code == 0
+        assert mock_build.call_args.kwargs["ticket_cache"] is None
+
+

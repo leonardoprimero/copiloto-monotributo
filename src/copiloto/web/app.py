@@ -71,17 +71,24 @@ def _default_arca_registry() -> TaxpayerRegistry | None:
         cuit = os.environ.get("COPILOTO_ARCA_CUIT")
         if cert and key and cuit:
             try:
-                from copiloto.arca.client import build_registry
+                from copiloto.arca.client import build_registry, default_ticket_cache_path
 
                 env = os.environ.get("COPILOTO_ARCA_ENV", "produccion")
                 cache = os.environ.get("COPILOTO_ARCA_TICKET_CACHE")
                 passphrase = os.environ.get("COPILOTO_ARCA_PASSPHRASE")
+                if cache and cache.lower() in ("none", "0", "false"):
+                    cache_path = None
+                elif cache:
+                    cache_path = Path(cache)
+                else:
+                    cache_path = default_ticket_cache_path()
+
                 return build_registry(
                     cert_path=Path(cert),
                     key_path=Path(key),
                     represented_cuit=cuit,
                     environment=env,
-                    ticket_cache=Path(cache) if cache else None,
+                    ticket_cache=cache_path,
                     passphrase=passphrase.encode() if passphrase else None,
                 )
             except ImportError:

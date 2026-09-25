@@ -9,6 +9,7 @@ the errors a person can cause.
 import re
 from datetime import date
 from decimal import Decimal
+from importlib.util import find_spec
 from pathlib import Path
 
 import pytest
@@ -17,7 +18,10 @@ from fastapi.testclient import TestClient
 from copiloto.extractors.fake import FakeExtractor
 from copiloto.models import ExtractedInvoice, InvoiceItem
 from copiloto.report import DISCLAIMER_ES
-from copiloto.web.app import WebSettings, create_app
+from copiloto.web.app import WebSettings, _default_arca_registry, create_app
+
+HAS_ARCA = find_spec("defusedxml") is not None
+
 
 TODAY = date(2026, 9, 24)
 
@@ -347,3 +351,62 @@ class TestWebArca:
         assert response.status_code == 200
         assert "Derivamos este caso a un contador" in response.text
         assert "Falta registrar datos biométricos" in response.text
+
+
+class TestDefaultArcaRegistry:
+    @pytest.mark.skipif(not HAS_ARCA, reason="the arca extra is not installed")
+    def test_resolves_default_cache_path_when_unset(self, monkeypatch) -> None:
+        from unittest.mock import MagicMock
+        from copiloto.arca.client import default_ticket_cache_path
+
+        monkeypatch.setenv("COPILOTO_ARCA", "1")
+        monkeypatch.setenv("COPILOTO_ARCA_CERT", "cert.pem")
+        monkeypatch.setenv("COPILOTO_ARCA_KEY", "key.pem")
+        monkeypatch.setenv("COPILOTO_ARCA_CUIT", "20-11111111-2")
+        monkeypatch.delenv("COPILOTO_ARCA_TICKET_CACHE", raising=False)
+
+        mock_build = MagicMock()
+        monkeypatch.setattr("copiloto.arca.client.build_registry", mock_build)
+
+        _default_arca_registry()
+
+        mock_build.assert_called_once()
+        assert mock_build.call_args.kwargs["ticket_cache"] == default_ticket_cache_path()
+
+    @pytest.mark.skipif(not HAS_ARCA, reason="the arca extra is not installed")
+    @pytest.mark.parametrize("opt_out", ["none", "0", "false", "None", "FALSE"])
+    def test_resolves_none_when_cache_opted_out(self, opt_out: str, monkeypatch) -> None:
+        from unittest.mock import MagicMock
+
+        monkeypatch.setenv("COPILOTO_ARCA", "1")
+        monkeypatch.setenv("COPILOTO_ARCA_CERT", "cert.pem")
+        monkeypatch.setenv("COPILOTO_ARCA_KEY", "key.pem")
+        monkeypatch.setenv("COPILOTO_ARCA_CUIT", "20-11111111-2")
+        monkeypatch.setenv("COPILOTO_ARCA_TICKET_CACHE", opt_out)
+
+        mock_build = MagicMock()
+        monkeypatch.setattr("copiloto.arca.client.build_registry", mock_build)
+
+        _default_arca_registry()
+
+        mock_build.assert_called_once()
+        assert mock_build.call_args.kwargs["ticket_cache"] is None
+
+    @pytest.mark.skipif(not HAS_ARCA, reason="the arca extra is not installed")
+    def test_resolves_custom_path_when_set(self, monkeypatch) -> None:
+        from unittest.mock import MagicMock
+
+        monkeypatch.setenv("COPILOTO_ARCA", "1")
+        monkeypatch.setenv("COPILOTO_ARCA_CERT", "cert.pem")
+        monkeypatch.setenv("COPILOTO_ARCA_KEY", "key.pem")
+        monkeypatch.setenv("COPILOTO_ARCA_CUIT", "20-11111111-2")
+        monkeypatch.setenv("COPILOTO_ARCA_TICKET_CACHE", "/custom/tickets.json")
+
+        mock_build = MagicMock()
+        monkeypatch.setattr("copiloto.arca.client.build_registry", mock_build)
+
+        _default_arca_registry()
+
+        mock_build.assert_called_once()
+        assert mock_build.call_args.kwargs["ticket_cache"] == Path("/custom/tickets.json")
+

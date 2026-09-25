@@ -94,6 +94,32 @@ class TestReviewBranch:
         assert "__interrupt__" not in result
         assert "# Informe de monotributo" in result["report"]
 
+    def test_constancia_unavailable_routes_to_accountant_review(self) -> None:
+        from copiloto.arca.exceptions import ConstanciaUnavailable
+
+        class BlockedRegistry:
+            def lookup(self, cuit: str):
+                raise ConstanciaUnavailable(cuit, ("Falta registrar datos biométricos",))
+
+            def known_cuits(self) -> tuple[str, ...]:
+                return ()
+
+        graph = build_graph(
+            extractor=FakeExtractor(twelve("800000")),
+            registry=BlockedRegistry(),  # type: ignore[arg-type]
+            scales=SCALES,
+            today=TODAY,
+            policy=RiskPolicy(review_levels=frozenset()),
+        )
+        result = graph.invoke(
+            {"taxpayer_cuit": CUIT, "raw_invoices": tuple(twelve("800000"))},
+            {"configurable": {"thread_id": "test-blocked"}},
+        )
+
+        assert "__interrupt__" in result
+        alert = result["__interrupt__"][0].value
+        assert any(i["code"] == "CONSTANCIA_UNAVAILABLE" for i in alert["issues"])
+
 
 class TestIssueAccumulation:
     def test_issues_from_different_nodes_are_kept_together(self) -> None:

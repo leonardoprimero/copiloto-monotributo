@@ -70,6 +70,44 @@ class TestLookupNode:
 
         assert result["issues"][0].severity == "warning"
 
+    def test_constancia_unavailable_is_reported_as_warning_with_reasons(self) -> None:
+        from copiloto.arca.padron import ConstanciaUnavailable
+
+        class BlockedRegistry:
+            def lookup(self, cuit: str):
+                raise ConstanciaUnavailable(
+                    cuit, ("CUIT cancelada", "Falta registrar datos biométricos")
+                )
+
+            def known_cuits(self) -> tuple[str, ...]:
+                return ()
+
+        node = make_lookup_node(BlockedRegistry())  # type: ignore[arg-type]
+        result = node({"taxpayer_cuit": KNOWN_CUIT})
+
+        assert result["taxpayer"] is None
+        assert [i.code for i in result["issues"]] == ["CONSTANCIA_UNAVAILABLE"]
+        assert result["issues"][0].severity == "warning"
+        assert "Falta registrar datos biométricos" in result["issues"][0].message
+
+    def test_padron_error_is_reported_as_warning(self) -> None:
+        from copiloto.arca.padron import PadronError
+
+        class FailingRegistry:
+            def lookup(self, cuit: str):
+                raise PadronError("El servicio de ARCA no responde")
+
+            def known_cuits(self) -> tuple[str, ...]:
+                return ()
+
+        node = make_lookup_node(FailingRegistry())  # type: ignore[arg-type]
+        result = node({"taxpayer_cuit": KNOWN_CUIT})
+
+        assert result["taxpayer"] is None
+        assert [i.code for i in result["issues"]] == ["PADRON_ERROR"]
+        assert result["issues"][0].severity == "warning"
+        assert "El servicio de ARCA no responde" in result["issues"][0].message
+
 
 class TestAnalyzeNode:
     def test_produces_the_analysis_from_invoices_issues_and_taxpayer(self) -> None:

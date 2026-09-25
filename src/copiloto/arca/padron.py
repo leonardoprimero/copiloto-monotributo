@@ -29,6 +29,7 @@ import re
 
 from defusedxml import ElementTree
 
+from copiloto.arca.exceptions import ConstanciaUnavailable, PadronError, PersonNotFound
 from copiloto.cuit import is_valid_cuit, normalize_cuit
 from copiloto.models import TaxpayerProfile
 
@@ -40,35 +41,6 @@ _CATEGORY = re.compile(r"^([A-K])\b")
 # How the padrón says a CUIT does not exist, both as a SOAP fault on the wire
 # and inside the manual's errorConstancia example.
 NOT_FOUND = "No existe persona con ese Id"
-
-
-class PadronError(RuntimeError):
-    """The padrón answered something this copilot cannot read."""
-
-
-class PersonNotFound(PadronError):
-    """The padrón has no one with that CUIT."""
-
-
-class ConstanciaUnavailable(PadronError):
-    """The CUIT exists, but ARCA will not issue its constancia.
-
-    `reasons` are ARCA's own words, one per `error` element, because they say
-    what the taxpayer has to go and fix.
-    """
-
-    # ARCA's text is kept whole in `reasons`. The message is what ends up in a
-    # log line, so it is one line and it stops somewhere.
-    _MESSAGE_LIMIT = 240
-
-    def __init__(self, cuit: str, reasons: tuple[str, ...]) -> None:
-        self.cuit = cuit
-        self.reasons = reasons
-        whom = cuit or "an unidentified CUIT"
-        listed = " ".join(" ".join(reason.split()) for reason in reasons) or "ARCA gave no reason."
-        if len(listed) > self._MESSAGE_LIMIT:
-            listed = listed[: self._MESSAGE_LIMIT] + "…"
-        super().__init__(f"ARCA will not issue the constancia for {whom}: {listed}")
 
 
 def _formatted_cuit(digits: str) -> str:

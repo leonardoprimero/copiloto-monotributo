@@ -119,12 +119,39 @@ def make_validate_node(*, scales: Scales, today: date):
     return validate_invoices
 
 
+from copiloto.arca.exceptions import ConstanciaUnavailable, PadronError
+
+
 def make_lookup_node(registry: TaxpayerRegistry):
     """Build the node that asks the registry which category is on file."""
 
     def lookup_taxpayer(state: CopilotState) -> dict:
         cuit = state.get("taxpayer_cuit", "")
-        profile = registry.lookup(cuit)
+        try:
+            profile = registry.lookup(cuit)
+        except ConstanciaUnavailable as error:
+            return {
+                "taxpayer": None,
+                "issues": [
+                    Issue(
+                        code="CONSTANCIA_UNAVAILABLE",
+                        severity="warning",
+                        message=str(error),
+                    )
+                ],
+            }
+        except PadronError as error:
+            return {
+                "taxpayer": None,
+                "issues": [
+                    Issue(
+                        code="PADRON_ERROR",
+                        severity="warning",
+                        message=str(error),
+                    )
+                ],
+            }
+
         if profile is None:
             # Absence is reported, never filled in with a guess: without a
             # registered category there is nothing to compare against, and the

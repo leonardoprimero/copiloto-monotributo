@@ -298,3 +298,52 @@ class TestScannedUploads:
 
         assert page.status_code == 400
         assert "escaneada.pdf" in page.text
+
+
+class TestWebArca:
+    def test_arca_registry_allows_omitting_category(self) -> None:
+        from copiloto.models import TaxpayerProfile
+        from copiloto.registry import MockArcaRegistry
+
+        fake_reg = MockArcaRegistry(
+            {"20-11111111-2": TaxpayerProfile(cuit="20-11111111-2", name="Contribuyente Real", category="A")}
+        )
+        settings = WebSettings(
+            state_db=None,
+            extractor_mode="cli",
+            extractor_factory=lambda _case: FakeExtractor(mapping_for(rendered_texts())),
+            clock=lambda: TODAY,
+            arca_registry=fake_reg,
+        )
+        client = TestClient(create_app(settings), follow_redirects=True)
+        files = [("invoices", (f"factura-{i}.txt", text, "text/plain")) for i, text in enumerate(rendered_texts())]
+        response = client.post("/casos", data={"cuit": "20-11111111-2", "category": ""}, files=files)
+
+        assert response.status_code == 200
+        assert "Categoría registrada: A" in response.text
+        assert "Contribuyente Real" in response.text
+
+    def test_arca_constancia_unavailable_in_web_routes_to_review(self) -> None:
+        from copiloto.arca.exceptions import ConstanciaUnavailable
+
+        class BlockedReg:
+            def lookup(self, cuit: str):
+                raise ConstanciaUnavailable(cuit, ("Falta registrar datos biométricos",))
+
+            def known_cuits(self) -> tuple[str, ...]:
+                return ()
+
+        settings = WebSettings(
+            state_db=None,
+            extractor_mode="cli",
+            extractor_factory=lambda _case: FakeExtractor(mapping_for(rendered_texts())),
+            clock=lambda: TODAY,
+            arca_registry=BlockedReg(),  # type: ignore[arg-type]
+        )
+        client = TestClient(create_app(settings), follow_redirects=True)
+        files = [("invoices", (f"factura-{i}.txt", text, "text/plain")) for i, text in enumerate(rendered_texts())]
+        response = client.post("/casos", data={"cuit": "20-11111111-2", "category": ""}, files=files)
+
+        assert response.status_code == 200
+        assert "Derivamos este caso a un contador" in response.text
+        assert "Falta registrar datos biométricos" in response.text

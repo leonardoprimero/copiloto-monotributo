@@ -11,6 +11,7 @@ session.
 with a fake extractor, and `serve` can run it on SQLite with a real one.
 """
 
+import os
 import tempfile
 from collections.abc import Callable
 from dataclasses import dataclass, field
@@ -34,7 +35,7 @@ from copiloto.extractors.protocol import ExtractionError
 from copiloto.extractors.select import ExtractorFactory, build_extractor_factory, fake_for
 from copiloto.graph.checkpoints import open_checkpointer
 from copiloto.models import DeclaredParameters, HumanDecision, TaxpayerProfile, Verdict
-from copiloto.registry import MockArcaRegistry
+from copiloto.registry import MockArcaRegistry, TaxpayerRegistry
 from copiloto.report import DISCLAIMER_ES, REASON_LABELS, RISK_LABELS, format_money
 from copiloto.scales import load_scales
 from copiloto.service import CaseSummary, Copilot, Finished, PendingReview
@@ -63,6 +64,31 @@ STATUS_LABELS = {"pending": "pendiente", "done": "cerrado", "incomplete": "incom
 _markdown = MarkdownIt("commonmark", {"html": False})
 
 
+def _default_arca_registry() -> TaxpayerRegistry | None:
+    if os.environ.get("COPILOTO_ARCA") == "1" or os.environ.get("COPILOTO_ARCA_CERT"):
+        cert = os.environ.get("COPILOTO_ARCA_CERT")
+        key = os.environ.get("COPILOTO_ARCA_KEY")
+        cuit = os.environ.get("COPILOTO_ARCA_CUIT")
+        if cert and key and cuit:
+            try:
+                from copiloto.arca.client import build_registry
+
+                env = os.environ.get("COPILOTO_ARCA_ENV", "produccion")
+                cache = os.environ.get("COPILOTO_ARCA_TICKET_CACHE")
+                passphrase = os.environ.get("COPILOTO_ARCA_PASSPHRASE")
+                return build_registry(
+                    cert_path=Path(cert),
+                    key_path=Path(key),
+                    represented_cuit=cuit,
+                    environment=env,
+                    ticket_cache=Path(cache) if cache else None,
+                    passphrase=passphrase.encode() if passphrase else None,
+                )
+            except ImportError:
+                return None
+    return None
+
+
 @dataclass(frozen=True)
 class WebSettings:
     """Everything the app needs that is not code.
@@ -85,6 +111,7 @@ class WebSettings:
     policy: RiskPolicy = field(default_factory=RiskPolicy)
     ocr: Callable[[Path], str] | None = field(default_factory=default_ocr)
     access_token: str | None = None
+    arca_registry: TaxpayerRegistry | None = field(default_factory=_default_arca_registry)
 
 
 class FormError(ValueError):
@@ -266,6 +293,7 @@ def create_app(settings: WebSettings) -> FastAPI:
             cases=[summary_view(s) for s in service.list_cases()],
             extractor_mode=settings.extractor_mode,
             offline=settings.extractor_factory is None and settings.extractor_mode == "fake",
+            arca_enabled=settings.arca_registry is not None,
         )
 
     def extractor_for_uploads():
@@ -319,10 +347,18 @@ def create_app(settings: WebSettings) -> FastAPI:
             cuit = cuit.strip()
             if not is_valid_cuit(cuit):
                 raise FormError(f"El CUIT {cuit or '(vacío)'} no pasa el dígito verificador.")
-            if category not in categories:
-                raise FormError(
-                    f"La categoría {category or '(vacía)'} no existe. Son: {', '.join(categories)}."
-                )
+            if settings.arca_registry is not None:
+                if category and category not in categories:
+                    raise FormError(
+                        f"La categoría {category} no existe. Son: {', '.join(categories)}."
+                    )
+                case_registry = settings.arca_registry
+            else:
+                if not category or category not in categories:
+                    raise FormError(
+                        f"La categoría {category or '(vacía)'} no existe. Son: {', '.join(categories)}."
+                    )
+                case_registry = declared_registry(cuit, category)
             declared = parse_declared(surface_m2, energy_kwh, annual_rent)
             extractor = extractor_for_uploads()
             sources = read_uploads(invoices)
@@ -337,7 +373,7 @@ def create_app(settings: WebSettings) -> FastAPI:
             raw_invoices=tuple(s.text for s in sources),
             source_issues=(scanned,) if scanned else (),
             extractor=extractor,
-            registry=declared_registry(cuit, category),
+            registry=case_registry,
             today=settings.clock(),
             declared=declared,
         )

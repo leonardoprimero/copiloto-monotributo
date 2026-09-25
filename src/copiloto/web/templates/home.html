@@ -38,13 +38,13 @@
 
       <label>
         Categoría en la que estás registrado
-        <select name="category" required>
-          <option value="" {% if not form.category %}selected{% endif %}>Elegí una</option>
+        <select name="category" {% if not arca_enabled %}required{% endif %}>
+          <option value="" {% if not form.category %}selected{% endif %}>{% if arca_enabled %}Consultar en ARCA (o elegí una){% else %}Elegí una{% endif %}</option>
           {% for name in categories %}
           <option value="{{ name }}" {% if form.category == name %}selected{% endif %}>{{ name }}</option>
           {% endfor %}
         </select>
-        <small>Está en tu credencial y en el pago mensual. No hace falta ninguna clave de ARCA.</small>
+        <small>{% if arca_enabled %}Si la dejás vacía, se consulta directamente al padrón de ARCA.{% else %}Está en tu credencial y en el pago mensual. No hace falta ninguna clave de ARCA.{% endif %}</small>
       </label>
 
       <label>

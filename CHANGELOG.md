@@ -50,6 +50,15 @@ tres cosas que los manuales no muestran.
 
 ### Agregado
 
+- **Integración de ARCA a la CLI y la web:** con `--arca` (o `COPILOTO_ARCA=1`),
+  el copiloto consulta la categoría real al padrón en vez de exigirla en el
+  formulario o en la línea de comandos. Si ARCA no emite la constancia
+  (`ConstanciaUnavailable`) o el servicio falla (`PadronError`), el caso no se
+  rompe: genera una observación de advertencia y se deriva automáticamente a un
+  contador.
+- **Módulo `copiloto.arca.exceptions` sin dependencias externas**, permitiendo
+  que el grafo capture `ConstanciaUnavailable` y `PadronError` sin exigir la
+  instalación del extra `arca`.
 - **El ticket puede guardarse en disco** (`build_registry(ticket_cache=...)`),
   con permisos `600` y escritura atómica, para que un proceso nuevo no quede
   afuera mientras el anterior siga vigente.

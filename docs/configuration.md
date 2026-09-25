@@ -97,6 +97,22 @@ naming what gets published, because a case page is somebody's income.
 Over plain HTTP the token travels in the clear. Put TLS in front of it before
 it crosses anything you do not control.
 
+## ARCA (padrón real)
+
+Requiere `uv sync --extra arca` y un certificado digital emitido por ARCA (o WSASS en homologación). Con ARCA activo, la categoría del contribuyente es opcional: el copiloto la consulta directamente al padrón.
+
+| Variable | Flag CLI equivalente | Por defecto | Descripción |
+| --- | --- | --- | --- |
+| `COPILOTO_ARCA` | `--arca` | no activo | Activa la consulta al padrón real en lugar de la categoría declarada. |
+| `COPILOTO_ARCA_CERT` | `--arca-cert` | requerido con `--arca` | Ruta al archivo `.pem` del certificado digital X.509. |
+| `COPILOTO_ARCA_KEY` | `--arca-key` | requerido con `--arca` | Ruta a la clave privada `.key`. |
+| `COPILOTO_ARCA_CUIT` | `--arca-cuit` | requerido con `--arca` | CUIT representado (delegado en ARCA). |
+| `COPILOTO_ARCA_ENV` | `--arca-env` | `produccion` | Ambiente: `produccion` o `homologacion`. |
+| `COPILOTO_ARCA_TICKET_CACHE`| `--arca-ticket-cache` | en memoria | Ruta al archivo `.json` para persistir el ticket de acceso WSAA (12 h). |
+| `COPILOTO_ARCA_PASSPHRASE` | `--arca-passphrase` | vacía | Contraseña de la clave privada, si estuviera encriptada. |
+
+Si ARCA no puede emitir la constancia (`ConstanciaUnavailable`, por ejemplo por CUIT cancelada o falta de registro de datos biométricos) o el servicio falla (`PadronError`), el copiloto no se cae: genera una observación de severidad `warning` que deriva automáticamente el caso a revisión con un contador.
+
 ## Optional extras
 
 | Extra | Brings | Needed for |

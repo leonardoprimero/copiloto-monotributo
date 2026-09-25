@@ -176,6 +176,7 @@ Instalación: `uv sync --extra arca`.
 
 | Módulo | Qué hace |
 | --- | --- |
+| `arca/exceptions.py` | Excepciones (`PadronError`, `ConstanciaUnavailable`) sin dependencias externas |
 | `arca/wsaa.py` | Arma el TRA, parsea el TA, controla el vencimiento |
 | `arca/signing.py` | Firma el TRA como CMS SignedData en base64 |
 | `arca/soap.py` | Arma los sobres, los envía, traduce los faults |
@@ -184,7 +185,32 @@ Instalación: `uv sync --extra arca`.
 | `arca/ticket_cache.py` | Guarda el ticket en disco, con permisos de dueño y escritura atómica |
 | `arca/client.py` | `build_registry(...)` y `service_status(...)` |
 
-Con certificado, son dos llamadas:
+### Uso desde la CLI y la Web
+
+El cliente está integrado en la CLI y en la interfaz web. Al activar `--arca` (o `COPILOTO_ARCA=1`), la categoría ya no es requerida: el copiloto la resuelve consultando la constancia oficial.
+
+```sh
+# En la CLI:
+copiloto run --invoices-dir ./facturas --cuit 20-11111111-2 --arca \
+  --arca-cert certificado.pem \
+  --arca-key clave.key \
+  --arca-cuit 20-11111111-2 \
+  --arca-env homologacion \
+  --arca-ticket-cache ~/.arca/ticket.json
+
+# O exportando variables para la web o la CLI:
+export COPILOTO_ARCA=1
+export COPILOTO_ARCA_CERT=certificado.pem
+export COPILOTO_ARCA_KEY=clave.key
+export COPILOTO_ARCA_CUIT=20-11111111-2
+export COPILOTO_ARCA_ENV=homologacion
+export COPILOTO_ARCA_TICKET_CACHE=~/.arca/ticket.json
+copiloto serve
+```
+
+Si ARCA no emite la constancia (`ConstanciaUnavailable`) o la conexión falla (`PadronError`), el nodo de consulta emite una advertencia y deriva el caso a revisión con un contador.
+
+Con certificado en Python, son dos llamadas:
 
 ```python
 from pathlib import Path

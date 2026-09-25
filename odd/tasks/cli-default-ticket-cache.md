@@ -31,4 +31,4 @@ A persistent default path solves this seamlessly, while `--no-arca-ticket-cache`
 - [x] `T3`: Documentation & Changelog
   - Route: Direct inline (`docs/configuration.md`, `docs/arca-padron.md`, `CHANGELOG.md`).
   - Documented the default ticket cache path and `--no-arca-ticket-cache` flag in configuration guide, ARCA padrón doc, and CHANGELOG.
-  - Evidence: Commit pending, 867 tests pass, pyright 0 errors.
+  - Evidence: Commit `c6d7419`, 867 tests pass, pyright 0 errors.

@@ -259,7 +259,7 @@ class TestChangelog:
 
     def test_it_records_that_a_failed_cache_save_keeps_the_ticket(self) -> None:
         """The review's one critical finding: losing the ticket meant a 12-hour lockout."""
-        unreleased = self.changelog().split("## [Sin publicar]")[1].split("## [0.3.0]")[0]
+        section = self.changelog().split("## [0.4.0]")[1].split("## [0.3.0]")[0]
 
-        assert "RuntimeWarning" in unreleased
-        assert "no se pierde" in unreleased
+        assert "RuntimeWarning" in section
+        assert "no se pierde" in section

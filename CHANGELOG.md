@@ -5,6 +5,8 @@ Este proyecto usa [versionado semántico](https://semver.org/lang/es/).
 
 ## [Sin publicar]
 
+## [0.4.0] - 2026-09-25
+
 El cliente del padrón corrió por primera vez contra ARCA, en homologación y con
 un certificado emitido por WSASS. Funcionó de punta a punta después de corregir
 tres cosas que los manuales no muestran.
@@ -190,7 +192,8 @@ Primera versión: el grafo completo, de las facturas al informe.
 - CI que prueba que un clone limpio corre todo sin API key, sin herramienta de
   IA y sin red.
 
-[Sin publicar]: https://github.com/leonardoprimero/copiloto-monotributo/compare/v0.3.0...HEAD
+[Sin publicar]: https://github.com/leonardoprimero/copiloto-monotributo/compare/v0.4.0...HEAD
+[0.4.0]: https://github.com/leonardoprimero/copiloto-monotributo/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/leonardoprimero/copiloto-monotributo/releases/tag/v0.3.0
 [0.2.0]: https://github.com/leonardoprimero/copiloto-monotributo/releases/tag/v0.2.0
 [0.1.0]: https://github.com/leonardoprimero/copiloto-monotributo/releases/tag/v0.1.0

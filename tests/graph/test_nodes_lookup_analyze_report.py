@@ -71,7 +71,7 @@ class TestLookupNode:
         assert result["issues"][0].severity == "warning"
 
     def test_constancia_unavailable_is_reported_as_warning_with_reasons(self) -> None:
-        from copiloto.arca.padron import ConstanciaUnavailable
+        from copiloto.arca.exceptions import ConstanciaUnavailable
 
         class BlockedRegistry:
             def lookup(self, cuit: str):
@@ -91,7 +91,7 @@ class TestLookupNode:
         assert "Falta registrar datos biométricos" in result["issues"][0].message
 
     def test_padron_error_is_reported_as_warning(self) -> None:
-        from copiloto.arca.padron import PadronError
+        from copiloto.arca.exceptions import PadronError
 
         class FailingRegistry:
             def lookup(self, cuit: str):

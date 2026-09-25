@@ -6,11 +6,14 @@ because the only thing a lookup would tell us is a letter the taxpayer already
 knows.
 """
 
+from importlib.util import find_spec
 from pathlib import Path
 
 import pytest
 
 from copiloto.cli import main
+
+HAS_ARCA = find_spec("defusedxml") is not None
 
 TEXT = """FACTURA C
 Punto de venta 0001 - Comprobante 0000000{n}
@@ -428,6 +431,7 @@ class TestCliArca:
         assert "--arca-key" in err
         assert "--arca-cuit" in err
 
+    @pytest.mark.skipif(not HAS_ARCA, reason="the arca extra is not installed")
     def test_arca_allows_omitting_category(
         self, folder: Path, capsys, monkeypatch
     ) -> None:
@@ -495,6 +499,7 @@ class TestCliArca:
         err = capsys.readouterr().err
         assert "uv sync --extra arca" in err
 
+    @pytest.mark.skipif(not HAS_ARCA, reason="the arca extra is not installed")
     def test_arca_wires_build_registry(
         self, folder: Path, capsys, monkeypatch, tmp_path: Path
     ) -> None:

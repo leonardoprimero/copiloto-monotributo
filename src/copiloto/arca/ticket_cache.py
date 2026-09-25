@@ -42,16 +42,17 @@ try:
 except ImportError:  # pragma: no cover - Windows has no flock; writers are not serialised there
     fcntl = None
 
-# How the lock file is opened: created owner-only if missing, never through a
-# symlink, never inherited by children, and without blocking on a planted
-# FIFO. The two flags Windows lacks fall back to nothing there.
-_LOCK_FLAGS = (
+# How files here are opened for reading: never through a symlink, never
+# inherited by children, and without blocking on a planted FIFO. The flags
+# Windows lacks fall back to nothing there, so the module still imports.
+_READ_FLAGS = (
     os.O_RDONLY
-    | os.O_CREAT
-    | os.O_NONBLOCK
+    | getattr(os, "O_NONBLOCK", 0)
     | getattr(os, "O_NOFOLLOW", 0)
     | getattr(os, "O_CLOEXEC", 0)
 )
+# The lock file is also created owner-only when missing.
+_LOCK_FLAGS = _READ_FLAGS | os.O_CREAT
 
 
 class TicketCache:
@@ -144,7 +145,11 @@ class TicketCache:
     def _read(self) -> dict[str, object]:
         """Every entry in the file by key, in either format. Unreadable is empty."""
         try:
-            saved = json.loads(self._path.read_text(encoding="utf-8"))
+            descriptor = os.open(self._path, _READ_FLAGS)
+            with os.fdopen(descriptor, encoding="utf-8") as handle:
+                if not stat.S_ISREG(os.fstat(handle.fileno()).st_mode):
+                    return {}
+                saved = json.loads(handle.read())
         except (OSError, ValueError):
             return {}
         if not isinstance(saved, dict):

@@ -219,6 +219,14 @@ class TestItIsNotTrustedBlindly:
         assert cache(path, certificate="huella-1").load() is None, "expired: dropped"
         assert cache(path, certificate="huella-2").load() == other
 
+    def test_a_cache_path_that_is_a_symlink_is_not_read_through(self, path: Path) -> None:
+        """Reading follows the same rule as writing: no symlinks, no surprises."""
+        elsewhere = path.parent / "ajeno.json"
+        elsewhere.write_text(saved_fields())
+        path.symlink_to(elsewhere)
+
+        assert cache(path).load() is None
+
     def test_a_planted_lock_path_is_not_followed(self, path: Path) -> None:
         victim = path.parent / "victima"
         victim.write_text("intacto")
